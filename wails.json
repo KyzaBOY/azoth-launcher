@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "AzothLauncher",
+  "outputfilename": "AzothLauncher",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "tempesTT"
+  },
+  "info": {
+    "companyName": "Azoth (fan project)",
+    "productName": "Azoth Launcher",
+    "productVersion": "0.1.0",
+    "copyright": "Launcher code (c) tempesTT, MIT license. New World is a trademark of Amazon Games; this project is not affiliated with Amazon.",
+    "comments": "Launcher for the Azoth fan server: starts the original New World client and applies a few small patches in memory only."
+  }
+}

@@ -1,0 +1,97 @@
+<!doctype html>
+<!-- Source of the app icon (build/appicon.png): the Azoth emblem (reliquary) at 1024x1024.
+     Render with: msedge --headless=new --window-size=1024,1024 --screenshot=appicon.png icon-src.html
+     wails build generates build/windows/icon.ico from appicon.png. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1024px; height: 1024px; overflow: hidden; background: transparent; }
+  .bg { position: absolute; inset: 0; border-radius: 230px;
+    background: radial-gradient(ellipse 60% 55% at 50% 46%, #4a120c 0%, #210907 45%, #0b0606 100%);
+    box-shadow: inset 0 0 0 10px rgba(207,174,106,.55), inset 0 0 0 26px #0b0606, inset 0 0 0 29px rgba(207,174,106,.25); }
+  .glow { position: absolute; left: 212px; right: 212px; top: 150px; bottom: 260px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,80,36,.45) 0%, rgba(190,28,18,.2) 45%, transparent 72%); }
+  svg.em { position: absolute; left: 251px; top: 70px; width: 522px; height: 724px; overflow: visible;
+    filter: drop-shadow(0 18px 30px rgba(0,0,0,.65)) drop-shadow(0 0 40px rgba(224,52,31,.45)); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="em-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6e3a8"/><stop offset=".35" stop-color="#d4b064"/><stop offset=".7" stop-color="#9c7432"/><stop offset="1" stop-color="#5e4219"/>
+    </linearGradient>
+    <linearGradient id="em-gold-side" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7a5622"/><stop offset=".45" stop-color="#e8cd88"/><stop offset="1" stop-color="#6a4a1c"/>
+    </linearGradient>
+    <linearGradient id="em-face-l" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a1612"/><stop offset=".6" stop-color="#220a08"/><stop offset="1" stop-color="#120504"/>
+    </linearGradient>
+    <linearGradient id="em-face-r" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a0c0a"/><stop offset="1" stop-color="#0b0303"/>
+    </linearGradient>
+    <linearGradient id="em-bevel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a2f22"/><stop offset="1" stop-color="#3a100c"/>
+    </linearGradient>
+    <filter id="em-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.2"/></filter>
+    <clipPath id="em-clip-main"><path d="M80 6 L92 34 L96 58 L104 70 L102 150 L93 172 L67 172 L58 150 L56 56 Z"/></clipPath>
+
+    <!-- The Azoth reliquary: a corrupted crystal in a golden chalice -->
+    <symbol id="emblem" viewBox="0 0 160 222">
+      <!-- side crystals, behind -->
+      <g class="em-shards">
+        <path d="M22 96 L49 128 L58 168 L45 170 L31 136 Z" fill="url(#em-face-r)"/>
+        <path d="M22 96 L31 136 L45 170 L51 169 L40 132 Z" fill="url(#em-bevel)" opacity=".7"/>
+        <path d="M22 96 L31 136 L45 170" fill="none" stroke="#ffb08a" stroke-opacity=".45" stroke-width=".7"/>
+        <path d="M22 96 L49 128 L58 168 L45 170 L31 136 Z" fill="none" stroke="#c8563a" stroke-opacity=".5" stroke-width=".8"/>
+        <path d="M139 112 L113 138 L103 168 L115 170 L127 144 Z" fill="url(#em-face-r)"/>
+        <path d="M139 112 L113 138 L106 169 L110 169 L120 141 Z" fill="url(#em-bevel)" opacity=".5"/>
+        <path d="M139 112 L113 138 L103 168" fill="none" stroke="#ffb08a" stroke-opacity=".35" stroke-width=".7"/>
+        <path d="M139 112 L113 138 L103 168 L115 170 L127 144 Z" fill="none" stroke="#c8563a" stroke-opacity=".5" stroke-width=".8"/>
+      </g>
+      <!-- main crystal (chipped tip on the right) -->
+      <g class="em-crystal">
+        <path d="M80 6 L56 56 L58 150 L67 172 L77 172 L76 64 Z" fill="url(#em-face-l)"/>
+        <path d="M80 6 L76 64 L77 172 L93 172 L102 150 L104 70 L96 58 L92 34 Z" fill="url(#em-face-r)"/>
+        <path d="M80 6 L56 56 L76 64 Z" fill="url(#em-bevel)"/>
+        <path d="M80 6 L76 64 L96 58 L92 34 Z" fill="#33100c"/>
+        <path d="M96 58 L104 70 L88 74 L76 64 Z" fill="#1c0807"/>
+        <path d="M80 6 L56 56 L58 150" fill="none" stroke="#ffc09a" stroke-opacity=".55" stroke-width=".9"/>
+        <path d="M80 6 L76 64 L77 172" fill="none" stroke="#ff9a70" stroke-opacity=".3" stroke-width=".8"/>
+        <path d="M80 6 L92 34 L96 58 L104 70 L102 150 L93 172 L67 172 L58 150 L56 56 Z" fill="none" stroke="#e06a48" stroke-opacity=".55" stroke-width="1"/>
+      </g>
+      <!-- corruption veins inside the crystal -->
+      <g class="em-veins" fill="none" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#em-clip-main)">
+        <g filter="url(#em-blur)" stroke="#ff3a1c" stroke-width="5" opacity=".9">
+          <path d="M78 168 L72 148 L82 130 L74 110 L84 90 L77 72 L80 44"/>
+          <path d="M82 130 L94 118 L97 102"/><path d="M74 110 L64 100 L61 84"/><path d="M72 148 L63 138"/>
+        </g>
+        <g stroke="#ffb27a" stroke-width="1.3">
+          <path d="M78 168 L72 148 L82 130 L74 110 L84 90 L77 72 L80 44"/>
+          <path d="M82 130 L94 118 L97 102"/><path d="M74 110 L64 100 L61 84"/><path d="M72 148 L63 138"/>
+        </g>
+      </g>
+      <!-- golden chalice with claws -->
+      <g class="em-setting">
+        <path d="M53 170 C51 152 52 138 56 124 C60 138 64 152 66 170 Z" fill="url(#em-gold-side)"/>
+        <path d="M93 170 C96 152 100 140 103 126 C106 140 107 154 105 170 Z" fill="url(#em-gold-side)"/>
+        <path d="M74 172 C75 160 77 150 79 140 C81 150 83 160 84 172 Z" fill="url(#em-gold-side)"/>
+        <path d="M44 166 Q80 177 116 166 Q115 194 80 202 Q45 194 44 166 Z" fill="url(#em-gold)" stroke="#3a2608" stroke-width="1"/>
+        <path d="M46 170 Q80 181 114 170" fill="none" stroke="#fff1c4" stroke-width=".9" opacity=".6"/>
+        <path d="M49 180 Q80 190 111 180" fill="none" stroke="#4a3010" stroke-width="1.3" opacity=".85"/>
+        <g fill="#f4e2a6" stroke="#4a3010" stroke-width=".8">
+          <circle cx="58" cy="186" r="2.2"/><circle cx="80" cy="191" r="2.5"/><circle cx="102" cy="186" r="2.2"/>
+        </g>
+        <path d="M72 200 Q80 203 88 200 L86 208 Q80 210 74 208 Z" fill="url(#em-gold-side)" stroke="#3a2608" stroke-width=".8"/>
+        <circle cx="80" cy="214" r="5" fill="url(#em-gold)" stroke="#3a2608" stroke-width=".8"/>
+        <circle cx="78.4" cy="212.4" r="1.4" fill="#fff1c4" opacity=".8"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+<div class="bg"></div>
+<div class="glow"></div>
+<svg class="em" viewBox="0 0 160 222"><use href="#emblem"/></svg>
+</body>
+</html>

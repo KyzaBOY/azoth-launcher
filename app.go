@@ -1,0 +1,320 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/KyzaBOY/azoth-launcher/internal/account"
+	"github.com/KyzaBOY/azoth-launcher/internal/client"
+	"github.com/KyzaBOY/azoth-launcher/internal/config"
+)
+
+// Events sent to the frontend (runtime.EventsOn on the JS side).
+const (
+	evBusy    = "app:busy"        // bool: Play or the login is running
+	evAccount = "account:changed" // AccountInfo: login, logout or an expired session
+	evStatus  = "play:status"     // string: the status line under Play
+
+	ticketTimeout = 10 * time.Second // asking the account server for the Play ticket
+)
+
+// msgNotAllowed is what a player sees when the server's access list refuses
+// their Discord account (HTTP 403 on login or on the Play ticket).
+const msgNotAllowed = "Your Discord account doesn't have access yet. The playtest is closed for now."
+
+// App is the object exposed to the frontend (window.go.main.App).
+type App struct {
+	ctx context.Context
+
+	mu           sync.Mutex
+	loginCancel  context.CancelFunc // Discord login in progress (CancelLogin)
+	searchCancel context.CancelFunc // folder search in progress (CancelSearch)
+	cfg          config.Config
+	busy         bool
+
+	// emit sends an event to the frontend. It is a no-op until startup, and tests replace it.
+	emit func(event string, data ...any)
+}
+
+// AccountInfo is the Discord login the screen shows (it never carries the session or the ticket).
+type AccountInfo struct {
+	LoggedIn bool   `json:"loggedIn"`
+	ID       string `json:"id"`      // Discord id
+	Name     string `json:"name"`    // Discord name
+	Expires  int64  `json:"expires"` // end of the session (Unix, s)
+}
+
+// PlayResult is the outcome of Launch. Error is a sentence for the player.
+type PlayResult struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// SearchResult is the outcome of SearchInstalls.
+type SearchResult struct {
+	Installs  []client.Install `json:"installs"`
+	Complete  bool             `json:"complete"`  // false: the time cap hit before every folder was checked
+	Cancelled bool             `json:"cancelled"` // the player cancelled the search
+}
+
+func NewApp() *App { return &App{emit: func(string, ...any) {}} }
+
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	a.emit = func(event string, data ...any) { runtime.EventsEmit(ctx, event, data...) }
+	cfg, err := config.Load()
+	a.mu.Lock()
+	a.cfg = cfg
+	a.mu.Unlock()
+	if err != nil {
+		runtime.LogWarning(ctx, "config: "+err.Error())
+	}
+}
+
+func (a *App) setBusy(b bool) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if b && a.busy {
+		return false
+	}
+	a.busy = b
+	a.emit(evBusy, b)
+	return true
+}
+
+func (a *App) setStatus(s string) { a.emit(evStatus, s) }
+
+func (a *App) snapshot() config.Config {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cfg
+}
+
+// ---- bindings -----------------------------------------------------------
+
+// GetVersion returns the launcher version.
+func (a *App) GetVersion() string { return Version }
+
+// GetConfig returns the current settings.
+func (a *App) GetConfig() config.Config { return a.snapshot() }
+
+// SaveConfig saves the settings. The folder is only checked for existing here;
+// whether it really is New World is checked when the player presses Play.
+func (a *App) SaveConfig(c config.Config) (config.Config, error) {
+	c.GameDir = cleanPath(c.GameDir)
+	if c.GameDir != "" {
+		if _, err := os.Stat(c.GameDir); err != nil {
+			return a.snapshot(), errors.New("That folder doesn't exist.")
+		}
+	}
+	a.mu.Lock()
+	a.cfg = c
+	a.mu.Unlock()
+	if err := config.Save(c); err != nil {
+		return c, fmt.Errorf("Couldn't save the settings: %w", err)
+	}
+	return c, nil
+}
+
+// cleanPath trims spaces and the quotes Explorer puts around "Copy as path".
+func cleanPath(p string) string {
+	return strings.TrimSpace(strings.Trim(strings.TrimSpace(p), `"`))
+}
+
+// PickGameDir opens the folder picker for the New World folder.
+func (a *App) PickGameDir() (string, error) {
+	start := a.snapshot().GameDir
+	if _, err := os.Stat(start); err != nil {
+		start = ""
+	}
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "New World folder",
+		DefaultDirectory: start,
+	})
+}
+
+// SearchInstalls looks for New World installs (Steam libraries and a scan of
+// the fixed drives). It blocks until it is done, cancelled with CancelSearch or
+// the time cap hits; the screen awaits it without freezing.
+func (a *App) SearchInstalls() (SearchResult, error) {
+	a.mu.Lock()
+	if a.searchCancel != nil {
+		a.mu.Unlock()
+		return SearchResult{}, errors.New("A search is already running.")
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.searchCancel = cancel
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.searchCancel = nil
+		a.mu.Unlock()
+		cancel()
+	}()
+
+	installs, complete, err := client.Search(ctx, client.SearchOptions{Skip: []string{config.DataDir()}})
+	if err != nil { // only a cancelled context
+		return SearchResult{Installs: []client.Install{}, Cancelled: true}, nil
+	}
+	if installs == nil {
+		installs = []client.Install{}
+	}
+	return SearchResult{Installs: installs, Complete: complete}, nil
+}
+
+// CancelSearch stops the search in progress.
+func (a *App) CancelSearch() {
+	a.mu.Lock()
+	cancel := a.searchCancel
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// GetAccount returns the stored Discord login (an expired session counts as logged out).
+func (a *App) GetAccount() AccountInfo {
+	s, ok := account.Load(config.DataDir())
+	if !ok {
+		return AccountInfo{}
+	}
+	return AccountInfo{LoggedIn: true, ID: s.User.ID, Name: s.User.Name, Expires: s.Expires}
+}
+
+// LoginDiscord opens the browser on the account site's Discord login and waits
+// for it to come back (up to account.LoginTimeout). The session is stored
+// encrypted with DPAPI in account.dat.
+func (a *App) LoginDiscord() (AccountInfo, error) {
+	if err := account.ValidateURL(accountURL); err != nil {
+		return a.GetAccount(), errBadAccountAt
+	}
+	if !a.setBusy(true) {
+		return a.GetAccount(), errors.New("Something is already in progress.")
+	}
+	defer a.setBusy(false)
+	open := func(u string) error {
+		runtime.BrowserOpenURL(a.ctx, u)
+		return nil
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.mu.Lock()
+	a.loginCancel = cancel
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.loginCancel = nil
+		a.mu.Unlock()
+		cancel()
+	}()
+	s, err := account.Login(ctx, accountURL, open)
+	if errors.Is(err, context.Canceled) {
+		return a.GetAccount(), account.ErrDenied
+	}
+	if errors.Is(err, account.ErrNotAllowed) {
+		return a.GetAccount(), errors.New(msgNotAllowed)
+	}
+	if err != nil {
+		return a.GetAccount(), err
+	}
+	if err := account.Save(config.DataDir(), s); err != nil {
+		return a.GetAccount(), fmt.Errorf("Couldn't save the login: %w", err)
+	}
+	info := a.GetAccount()
+	a.emit(evAccount, info)
+	return info, nil
+}
+
+// CancelLogin gives up on the login in progress (the person closed the browser tab).
+func (a *App) CancelLogin() {
+	a.mu.Lock()
+	cancel := a.loginCancel
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// Logout deletes the stored session.
+func (a *App) Logout() AccountInfo {
+	if err := account.Clear(config.DataDir()); err != nil {
+		runtime.LogWarning(a.ctx, "account: "+err.Error())
+	}
+	info := a.GetAccount()
+	a.emit(evAccount, info)
+	return info
+}
+
+// Launch starts the game with the in-memory patches. It refuses without a
+// Discord login. Progress goes out as evStatus events; the result carries the
+// error text, if any. Neither the session nor the ticket is ever logged or shown.
+func (a *App) Launch() PlayResult {
+	if !a.setBusy(true) {
+		return PlayResult{Error: "Something is already in progress."}
+	}
+	defer a.setBusy(false)
+	if err := a.play(); err != nil {
+		return PlayResult{Error: err.Error()}
+	}
+	return PlayResult{OK: true}
+}
+
+func (a *App) play() error {
+	gw, err := parseGateway(gatewayHost, gatewayPort)
+	if err != nil {
+		return err
+	}
+	dataDir := config.DataDir()
+	sess, ok := account.Load(dataDir)
+	if !ok {
+		return errNotLoggedIn
+	}
+	binDir, err := prepareGame(a.snapshot().GameDir, dataDir, a.setStatus)
+	if err != nil {
+		return err
+	}
+	ticket, err := a.ticket(dataDir, sess)
+	if err != nil {
+		return err
+	}
+	a.setStatus(statusStarting)
+	_, err = client.Launch(client.LaunchOptions{
+		BinDir:      binDir,
+		GatewayAddr: gw.addr,
+		PingHost:    gw.host,
+		Persona:     ticket,
+	})
+	if err != nil { // Launch already killed the process if a patch failed
+		return startError(err)
+	}
+	return nil
+}
+
+// ticket trades the stored session for the ticket that goes into the game as
+// the persona, and turns the account server's answers into texts for the player.
+func (a *App) ticket(dataDir string, s account.Session) (string, error) {
+	if err := account.ValidateURL(accountURL); err != nil {
+		return "", errBadAccountAt
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, ticketTimeout)
+	defer cancel()
+	ticket, _, err := account.Ticket(ctx, accountURL, s.Token)
+	switch {
+	case err == nil:
+		return ticket, nil
+	case errors.Is(err, account.ErrSessionExpired):
+		_ = account.Clear(dataDir)
+		a.emit(evAccount, AccountInfo{})
+		return "", errors.New("Your login expired. Log in with Discord again.")
+	case errors.Is(err, account.ErrNotAllowed): // the session stays: only access is missing
+		return "", errors.New(msgNotAllowed)
+	default:
+		return "", fmt.Errorf("Could not reach the account server: %w", err)
+	}
+}

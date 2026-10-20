@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azoth</title>
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Divider with a diamond -->
+    <symbol id="divider" viewBox="0 0 400 16" preserveAspectRatio="none">
+      <line x1="0" y1="8" x2="180" y2="8" stroke="currentColor" stroke-width="1"/>
+      <line x1="220" y1="8" x2="400" y2="8" stroke="currentColor" stroke-width="1"/>
+      <path d="M200 1 L207 8 L200 15 L193 8 Z" style="fill:var(--corrupt)"/>
+      <circle cx="184" cy="8" r="1.6" fill="currentColor"/><circle cx="216" cy="8" r="1.6" fill="currentColor"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- Own title bar (the window has no native frame) -->
+<header class="titlebar" style="--wails-draggable:drag">
+  <div class="tb-brand">
+    <span class="tb-name">Azoth</span>
+  </div>
+  <div class="tb-actions" style="--wails-draggable:no-drag">
+    <button class="tb-btn" id="btn-settings" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-min" title="Minimize" aria-label="Minimize">
+      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6"><path d="M5 12.5h14"/></svg>
+    </button>
+    <button class="tb-btn tb-close" id="btn-close" title="Close" aria-label="Close">
+      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="stage">
+  <canvas id="sky"></canvas>
+  <div class="grain"></div>
+  <div class="vignette"></div>
+
+  <section class="content">
+    <div class="hero">
+      <h1 class="hero-title">Azoth</h1>
+      <p class="hero-tag">New World: Aeternum</p>
+      <svg class="divider"><use href="#divider"/></svg>
+
+      <section class="panel panel-account">
+        <header class="panel-head">
+          <h2>Account</h2>
+          <span class="panel-rule"></span>
+        </header>
+        <div class="account-body" id="account-out">
+          <div class="account-col">
+            <button type="button" class="btn-brass btn-sm" id="btn-login">Log in with Discord</button>
+            <p class="account-note" id="account-note">Your characters are tied to your Discord account.</p>
+            <p class="account-note" id="account-wait" hidden><span class="spinner"></span>Waiting for the browser… <button type="button" class="btn-mini" id="btn-login-cancel">Cancel</button></p>
+          </div>
+        </div>
+        <div class="account-body" id="account-in" hidden>
+          <div class="avatar" id="avatar">?</div>
+          <div class="account-col">
+            <div class="account-who">
+              <span class="account-sub">Logged in as</span>
+              <span class="account-name" id="account-name">—</span>
+            </div>
+            <button type="button" class="btn-ghost btn-sm" id="btn-logout">Log out</button>
+          </div>
+        </div>
+        <p class="account-err" id="account-err" hidden></p>
+      </section>
+
+      <button class="btn-play" id="btn-play">
+        <span class="btn-play-sheen"></span>
+        <span class="btn-play-text">Play</span>
+      </button>
+      <p class="play-status" id="play-status" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span id="foot-version">v0.1.0</span>
+  </footer>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden></div>
+</main>
+
+<!-- Settings -->
+<div class="modal" id="modal-settings" hidden>
+  <div class="modal-panel panel">
+    <header class="panel-head">
+      <h2>Settings</h2>
+      <span class="panel-rule"></span>
+    </header>
+    <form id="form-settings" autocomplete="off">
+      <label class="field">
+        <span class="field-label">New World folder</span>
+        <div class="field-row">
+          <input type="text" id="in-game" spellcheck="false" placeholder="C:\…\New World">
+          <button type="button" class="btn-ghost btn-sm" id="btn-browse">Browse…</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-search">Search</button>
+        </div>
+        <span class="field-help">The folder that holds <span class="mono">Bin64\NewWorld.exe</span>. Azoth never changes it: the game runs from its own copy.</span>
+      </label>
+      <p class="search-status" id="search-status" hidden>
+        <span class="spinner" id="search-spinner" hidden></span><span id="search-text"></span>
+        <button type="button" class="btn-mini" id="btn-search-cancel" hidden>Cancel</button>
+      </p>
+      <ul class="candidates" id="candidates" hidden></ul>
+      <div class="modal-actions">
+        <span class="grow"></span>
+        <button type="button" class="btn-ghost btn-sm" id="btn-settings-cancel">Cancel</button>
+        <button type="submit" class="btn-brass btn-sm" id="btn-settings-save">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="./js/bridge.js"></script>
+<script src="./js/fx.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>
