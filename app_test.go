@@ -21,7 +21,10 @@ import (
 // newTestApp makes an App with a private data directory and a recorded event log.
 func newTestApp(t *testing.T) (*App, *[]string) {
 	t.Helper()
-	t.Setenv("LOCALAPPDATA", t.TempDir())
+	t.Setenv(config.DataHomeEnv, t.TempDir())
+	// no session bus: on Linux the session goes to the file store, never to
+	// the keyring of the person running the tests
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
 	a := NewApp()
 	a.ctx = context.Background()
 	var mu sync.Mutex
@@ -100,6 +103,24 @@ func TestSaveConfig(t *testing.T) {
 	}
 }
 
+func TestSaveConfigProtonPath(t *testing.T) {
+	a, _ := newTestApp(t)
+	proton := t.TempDir()
+	if err := os.WriteFile(filepath.Join(proton, protonScript), []byte("#!/usr/bin/env python3\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := a.SaveConfig(config.Config{ProtonPath: ` "` + proton + `" `})
+	if err != nil || got.ProtonPath != proton {
+		t.Fatalf("save: %+v %v", got, err)
+	}
+	if _, err := a.SaveConfig(config.Config{ProtonPath: t.TempDir()}); err == nil {
+		t.Fatal("a folder without the proton script must be refused")
+	}
+	if a.GetConfig().ProtonPath != proton {
+		t.Fatal("a refused save must keep the previous settings")
+	}
+}
+
 func TestSaveConfigCopyDir(t *testing.T) {
 	a, _ := newTestApp(t)
 	if got := copyRoot(a.GetConfig()); got != a.DefaultCopyDir() || got != client.IsolatedCopyDir(config.DataDir()) {
@@ -167,7 +188,7 @@ func TestSaveConfigCopyDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(want, "Bin64", client.ExeName), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.CreateJunction(filepath.Join(want, "assets"), gameAssets); err != nil {
+	if err := dirLink(filepath.Join(want, "assets"), gameAssets); err != nil {
 		t.Fatal(err)
 	}
 	other := t.TempDir()

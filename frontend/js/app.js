@@ -1,12 +1,12 @@
 // Screen logic: the account panel (Discord), Play with its single status line,
-// and the settings dialog (the New World folder, with Browse and Search, and the
-// folder of the game copy).
+// and the settings dialog (the New World folder, with Browse and Search, the
+// folder of the game copy and, on Linux, the Proton folder).
 (function () {
   "use strict";
   const { api, bus, win, real, params } = window.AzothBridge;
   const $ = (id) => document.getElementById(id);
 
-  const state = { cfg: null, account: null, busy: false, loggingIn: false, searching: false, found: [], selected: "" };
+  const state = { cfg: null, account: null, busy: false, loggingIn: false, searching: false, found: [], selected: "", linux: false };
 
   // ---------- helpers ----------
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -54,7 +54,7 @@
     setStatus("Checking game files…");
     try {
       const r = await api.Launch();
-      if (r.ok) setStatus("Game started");
+      if (r.ok) setStatus(r.notice || "Game started");
       else setStatus(r.error || "Something went wrong.", true);
     } catch (e) {
       setStatus(errText(e), true);
@@ -101,6 +101,7 @@
   // ---------- settings ----------
   function openSettings() {
     $("in-game").value = (state.cfg && state.cfg.gameDir) || "";
+    $("in-proton").value = (state.cfg && state.cfg.protonPath) || "";
     $("in-copy").value = (state.cfg && state.cfg.copyDir) || "";
     api.DefaultCopyDir().then((d) => { $("in-copy").placeholder = "Default: " + d; }).catch(() => {});
     state.found = []; state.selected = "";
@@ -116,7 +117,8 @@
   async function saveSettings(ev) {
     ev.preventDefault();
     try {
-      state.cfg = await api.SaveConfig({ ...state.cfg, gameDir: $("in-game").value.trim(), copyDir: $("in-copy").value.trim() });
+      const linux = state.linux ? { protonPath: $("in-proton").value.trim() } : {};
+      state.cfg = await api.SaveConfig({ ...state.cfg, gameDir: $("in-game").value.trim(), copyDir: $("in-copy").value.trim(), ...linux });
       closeSettings();
       setStatus("");
       toast("Settings saved.", true);
@@ -130,11 +132,20 @@
     } catch (e) { toast(errText(e)); }
   }
 
-  async function browseCopy() {
+  async function browseInto(input, title) {
     try {
-      const dir = await api.PickCopyDir();
-      if (dir) $("in-copy").value = dir;
+      const dir = await api.PickFolder(title, $(input).value.trim());
+      if (dir) $(input).value = dir;
     } catch (e) { toast(errText(e)); }
+  }
+
+  // Linux paths and the Linux-only settings.
+  function applyPlatform(platform) {
+    state.linux = platform === "linux";
+    if (!state.linux) return;
+    $("linux-settings").hidden = false;
+    $("in-game").placeholder = "/…/New World";
+    $("game-exe-path").textContent = "Bin64/NewWorld.exe";
   }
 
   // ---------- search ----------
@@ -190,7 +201,8 @@
   $("btn-settings-cancel").addEventListener("click", closeSettings);
   $("form-settings").addEventListener("submit", saveSettings);
   $("btn-browse").addEventListener("click", browse);
-  $("btn-browse-copy").addEventListener("click", browseCopy);
+  $("btn-browse-proton").addEventListener("click", () => browseInto("in-proton", "Proton folder"));
+  $("btn-browse-copy").addEventListener("click", () => browseInto("in-copy", "Folder for the game copy"));
   $("btn-search").addEventListener("click", search);
   $("btn-search-cancel").addEventListener("click", () => api.CancelSearch());
   $("btn-login").addEventListener("click", loginDiscord);
@@ -203,6 +215,7 @@
   // ---------- start ----------
   (async function init() {
     $("foot-version").textContent = "v" + (await api.GetVersion());
+    applyPlatform(await api.GetPlatform());
     state.cfg = await api.GetConfig();
     renderAccount(await api.GetAccount());
 

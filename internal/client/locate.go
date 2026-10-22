@@ -6,13 +6,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"golang.org/x/sys/windows/registry"
 )
 
 // ErrGameNotFound is returned by ResolveGame when the folder has no
-// Bin64\NewWorld.exe (directly or one level down).
-var ErrGameNotFound = errors.New("Bin64\\" + ExeName + " not found")
+// Bin64/NewWorld.exe (directly or one level down).
+var ErrGameNotFound = errors.New(filepath.Join("Bin64", ExeName) + " not found")
 
 // IsolatedCopyDir is where the launcher builds its own isolated copy of the
 // game (<dataDir>\client), with Bin64\ inside.
@@ -53,38 +51,24 @@ func ResolveGame(path string) (root, binDir string, err error) {
 var vdfPathRe = regexp.MustCompile(`"path"\s+"((?:[^"\\]|\\.)*)"`)
 
 // FindSteamInstalls looks for installs of New World through Steam (read-only):
-// HKCU\Software\Valve\Steam\SteamPath -> steamapps\libraryfolders.vdf -> every
-// library's steamapps\common\New World. It returns the root of EVERY install
-// that has Bin64\NewWorld.exe, not only the first one.
+// every Steam root (steamRoots) -> steamapps/libraryfolders.vdf -> every
+// library's steamapps/common/New World. It returns the root of EVERY install
+// that has Bin64/NewWorld.exe, not only the first one.
 func FindSteamInstalls() []string {
-	var roots []string
-	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Valve\Steam`, registry.QUERY_VALUE); err == nil {
-		if v, _, err := k.GetStringValue("SteamPath"); err == nil && v != "" {
-			roots = append(roots, filepath.Clean(v))
-		}
-		k.Close()
-	}
-	if k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Valve\Steam`, registry.QUERY_VALUE); err == nil {
-		if v, _, err := k.GetStringValue("InstallPath"); err == nil && v != "" {
-			roots = append(roots, filepath.Clean(v))
-		}
-		k.Close()
-	}
+	roots := steamRoots()
 	libs := append([]string(nil), roots...)
 	for _, r := range roots {
 		data, err := os.ReadFile(filepath.Join(r, "steamapps", "libraryfolders.vdf"))
 		if err != nil {
 			continue
 		}
-		for _, m := range vdfPathRe.FindAllStringSubmatch(string(data), -1) {
-			libs = append(libs, filepath.Clean(strings.ReplaceAll(m[1], `\\`, `\`)))
-		}
+		libs = append(libs, libraryFolders(data)...)
 	}
 	var found []string
 	seen := map[string]bool{}
 	for _, lib := range libs {
 		root := filepath.Join(lib, "steamapps", "common", "New World")
-		key := strings.ToLower(root)
+		key := pathKey(root)
 		if seen[key] {
 			continue
 		}
@@ -94,4 +78,14 @@ func FindSteamInstalls() []string {
 		}
 	}
 	return found
+}
+
+// libraryFolders returns the "path" of every library in a libraryfolders.vdf.
+// Windows paths in the file have their backslashes escaped (D:\\SteamLibrary).
+func libraryFolders(vdf []byte) []string {
+	var libs []string
+	for _, m := range vdfPathRe.FindAllStringSubmatch(string(vdf), -1) {
+		libs = append(libs, filepath.Clean(strings.ReplaceAll(m[1], `\\`, `\`)))
+	}
+	return libs
 }

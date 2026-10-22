@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Azoth Launcher
+Comment=Starts New World against the Azoth fan server
+Exec=azoth-launcher
+Icon=azoth-launcher
+Terminal=false
+Categories=Game;
+StartupWMClass=azoth-launcher
