@@ -18,7 +18,7 @@ var (
 	errBadServer    = errors.New("This build has an invalid server address. Download the official launcher from projectazoth.com.")
 	errNotLoggedIn  = errors.New("Log in with Discord to play.")
 	errNoFolder     = errors.New("Choose your New World folder in Settings first.")
-	errNoGameFound  = errors.New("Couldn't find Bin64\\NewWorld.exe in your New World folder. Check it in Settings.")
+	errNoGameFound  = errors.New("Couldn't find " + filepath.Join("Bin64", client.ExeName) + " in your New World folder. Check it in Settings.")
 	errUnsupported  = errors.New("This New World version isn't supported. Azoth needs build 1.400.6031.")
 	errPatchFailed  = errors.New("Couldn't patch the game, so it was not started. Check that New World is build 1.400.6031 and try again.")
 	errBadAccountAt = errors.New("This build has an invalid account server address. Download the official launcher from projectazoth.com.")

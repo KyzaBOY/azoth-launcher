@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +25,7 @@ const (
 	evStatus  = "play:status"     // string: the status line under Play
 
 	ticketTimeout = 10 * time.Second // asking the account server for the Play ticket
+	protonScript  = "proton"         // the script every Proton folder has (the protonPath setting)
 )
 
 // msgNotAllowed is what a player sees when the server's access list refuses
@@ -51,10 +54,12 @@ type AccountInfo struct {
 	Expires  int64  `json:"expires"` // end of the session (Unix, s)
 }
 
-// PlayResult is the outcome of Launch. Error is a sentence for the player.
+// PlayResult is the outcome of Launch. Error is a sentence for the player;
+// Notice replaces "Game started" when the game started with a caveat.
 type PlayResult struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK     bool   `json:"ok"`
+	Error  string `json:"error,omitempty"`
+	Notice string `json:"notice,omitempty"`
 }
 
 // SearchResult is the outcome of SearchInstalls.
@@ -102,6 +107,10 @@ func (a *App) snapshot() config.Config {
 // GetVersion returns the launcher version.
 func (a *App) GetVersion() string { return Version }
 
+// GetPlatform returns "windows" or "linux": the screen shows the Linux
+// settings only on Linux.
+func (a *App) GetPlatform() string { return goruntime.GOOS }
+
 // GetConfig returns the current settings.
 func (a *App) GetConfig() config.Config { return a.snapshot() }
 
@@ -109,9 +118,15 @@ func (a *App) GetConfig() config.Config { return a.snapshot() }
 // whether it really is New World is checked when the player presses Play.
 func (a *App) SaveConfig(c config.Config) (config.Config, error) {
 	c.GameDir = cleanPath(c.GameDir)
+	c.ProtonPath = cleanPath(c.ProtonPath)
 	if c.GameDir != "" {
 		if _, err := os.Stat(c.GameDir); err != nil {
 			return a.snapshot(), errors.New("That folder doesn't exist.")
+		}
+	}
+	if c.ProtonPath != "" {
+		if st, err := os.Stat(filepath.Join(c.ProtonPath, protonScript)); err != nil || st.IsDir() {
+			return a.snapshot(), errors.New("That Proton folder has no proton script in it.")
 		}
 	}
 	a.mu.Lock()
@@ -130,12 +145,16 @@ func cleanPath(p string) string {
 
 // PickGameDir opens the folder picker for the New World folder.
 func (a *App) PickGameDir() (string, error) {
-	start := a.snapshot().GameDir
+	return a.PickFolder("New World folder", a.snapshot().GameDir)
+}
+
+// PickFolder opens the folder picker with title, starting at start if it exists.
+func (a *App) PickFolder(title, start string) (string, error) {
 	if _, err := os.Stat(start); err != nil {
 		start = ""
 	}
 	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "New World folder",
+		Title:            title,
 		DefaultDirectory: start,
 	})
 }
@@ -259,41 +278,43 @@ func (a *App) Launch() PlayResult {
 		return PlayResult{Error: "Something is already in progress."}
 	}
 	defer a.setBusy(false)
-	if err := a.play(); err != nil {
+	notice, err := a.play()
+	if err != nil {
 		return PlayResult{Error: err.Error()}
 	}
-	return PlayResult{OK: true}
+	return PlayResult{OK: true, Notice: notice}
 }
 
-func (a *App) play() error {
+func (a *App) play() (notice string, err error) {
 	gw, err := parseGateway(gatewayHost, gatewayPort)
 	if err != nil {
-		return err
+		return "", err
 	}
 	dataDir := config.DataDir()
 	sess, ok := account.Load(dataDir)
 	if !ok {
-		return errNotLoggedIn
+		return "", errNotLoggedIn
 	}
-	binDir, err := prepareGame(a.snapshot().GameDir, dataDir, a.setStatus)
+	cfg := a.snapshot()
+	binDir, err := prepareGame(cfg.GameDir, dataDir, a.setStatus)
 	if err != nil {
-		return err
+		return "", err
 	}
 	ticket, err := a.ticket(dataDir, sess)
 	if err != nil {
-		return err
+		return "", err
 	}
 	a.setStatus(statusStarting)
-	_, err = client.Launch(client.LaunchOptions{
+	notice, err = a.launchGame(cfg, client.LaunchOptions{
 		BinDir:      binDir,
 		GatewayAddr: gw.addr,
 		PingHost:    gw.host,
 		Persona:     ticket,
 	})
-	if err != nil { // Launch already killed the process if a patch failed
-		return startError(err)
+	if err != nil { // the launch already killed the process if a patch failed
+		return "", startError(err)
 	}
-	return nil
+	return notice, nil
 }
 
 // ticket trades the stored session for the ticket that goes into the game as
