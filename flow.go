@@ -58,7 +58,9 @@ func parseGateway(host, port string) (gateway, error) {
 //
 //  1. the folder is resolved (the install root, its Bin64 folder or NewWorld.exe);
 //  2. NewWorld.exe must be the supported build (normalized sha256);
-//  3. if the folder is an install of the game, the game never runs there: it
+//  3. the Azoth logo pak goes into the install's assets folder (the one file
+//     the launcher adds to an install; see client.InstallLogo);
+//  4. if the folder is an install of the game, the game never runs there: it
 //     runs from an isolated copy in dataDir, which is built the first time and
 //     reused while its exe and its assets link still match the install.
 //
@@ -86,6 +88,10 @@ func prepareGame(gameDir, dataDir string, status func(string)) (string, error) {
 	case sum != client.ExpectedSHA256:
 		return "", errUnsupported
 	}
+
+	// The Azoth logo at the end of the tutorial (internal/client/logo.go). It is
+	// cosmetic: if it cannot be written, the game still starts with its own logo.
+	_ = client.InstallLogo(filepath.Join(root, "assets"))
 
 	if !client.IsSteamInstall(binDir) {
 		return binDir, nil
