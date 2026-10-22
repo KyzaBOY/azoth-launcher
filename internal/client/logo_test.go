@@ -51,6 +51,17 @@ func TestLogoPak(t *testing.T) {
 		if !ok || len(want) == 0 || f.Method != zip.Store {
 			t.Fatalf("unexpected pak entry %q (method %d)", f.Name, f.Method)
 		}
+		// the local header must carry CRC and sizes (no data descriptor), or the game can't read it
+		off, err := f.DataOffset()
+		if err != nil {
+			t.Fatal(err)
+		}
+		lh := pak[off-30-int64(len(f.Name)) : off]
+		flags := binary.LittleEndian.Uint16(lh[6:])
+		crc, csz, usz := binary.LittleEndian.Uint32(lh[14:]), binary.LittleEndian.Uint32(lh[18:]), binary.LittleEndian.Uint32(lh[22:])
+		if flags&0x8 != 0 || crc != f.CRC32 || int(csz) != len(want) || int(usz) != len(want) {
+			t.Fatalf("%s local header: flags %#x crc %#x sizes %d/%d", f.Name, flags, crc, csz, usz)
+		}
 		rc, err := f.Open()
 		if err != nil {
 			t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"sort"
@@ -44,7 +45,9 @@ var (
 
 // LogoPak returns the logo pak: a zip with every LogoEntries file stored
 // uncompressed, in name order and with a fixed timestamp, so the bytes are the
-// same on every run.
+// same on every run. Each local header carries the CRC and the sizes, like the
+// game's paks: with a data descriptor instead (what zip.Writer.CreateHeader
+// writes), the game finds the file but cannot read it and draws a white box.
 func LogoPak() ([]byte, error) {
 	names := make([]string, 0, len(LogoEntries))
 	for name := range LogoEntries {
@@ -54,15 +57,19 @@ func LogoPak() ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	for _, name := range names {
-		w, err := zw.CreateHeader(&zip.FileHeader{
-			Name:     name,
-			Method:   zip.Store,
-			Modified: time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC),
+		data := LogoEntries[name]
+		w, err := zw.CreateRaw(&zip.FileHeader{
+			Name:               name,
+			Method:             zip.Store,
+			Modified:           time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC),
+			CRC32:              crc32.ChecksumIEEE(data),
+			CompressedSize64:   uint64(len(data)),
+			UncompressedSize64: uint64(len(data)),
 		})
 		if err != nil {
 			return nil, err
 		}
-		if _, err := w.Write(LogoEntries[name]); err != nil {
+		if _, err := w.Write(data); err != nil {
 			return nil, err
 		}
 	}
