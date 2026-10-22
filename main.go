@@ -1,7 +1,8 @@
 // Azoth Launcher starts the original New World client against the Azoth fan
 // server. It applies a few small patches to the game process in memory (never
 // to the game files), signs the player in with Discord and plays from an
-// isolated copy of the game, so the Steam install is never touched.
+// isolated copy of the game: the install is never run, and the only file added
+// to it is the Azoth logo pak (internal/client/logo.go).
 package main
 
 import (
