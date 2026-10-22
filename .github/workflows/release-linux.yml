@@ -1,5 +1,6 @@
 # Builds the Linux launcher (scripts/release-linux.sh) on Ubuntu 22.04, so the
-# binary runs on most distributions, and attaches it to an existing release.
+# binary runs on most distributions, from the branch it is run on, and
+# attaches it to an existing release (a draft works too).
 # The server address comes from the repository secrets GATEWAY_HOST and
 # GATEWAY_PORT: it is never in the source, and GitHub masks it in the log.
 name: Linux release
@@ -21,8 +22,6 @@ jobs:
       TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-go@v5
         with:
