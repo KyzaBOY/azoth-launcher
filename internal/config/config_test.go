@@ -9,7 +9,7 @@ import (
 
 func TestDataDir(t *testing.T) {
 	base := t.TempDir()
-	t.Setenv("LOCALAPPDATA", base)
+	t.Setenv(DataHomeEnv, base)
 	if got, want := DataDir(), filepath.Join(base, "AzothLauncher"); got != want {
 		t.Fatalf("DataDir = %q, want %q", got, want)
 	}
@@ -19,7 +19,7 @@ func TestDataDir(t *testing.T) {
 }
 
 func TestLoadMissingFile(t *testing.T) {
-	t.Setenv("LOCALAPPDATA", t.TempDir())
+	t.Setenv(DataHomeEnv, t.TempDir())
 	c, err := Load()
 	if err != nil || c != (Config{}) {
 		t.Fatalf("no file: %+v %v", c, err)
@@ -27,7 +27,7 @@ func TestLoadMissingFile(t *testing.T) {
 }
 
 func TestSaveLoadRoundTrip(t *testing.T) {
-	t.Setenv("LOCALAPPDATA", t.TempDir())
+	t.Setenv(DataHomeEnv, t.TempDir())
 	want := Config{GameDir: `D:\Games\New World`}
 	if err := Save(want); err != nil {
 		t.Fatal(err)
@@ -60,7 +60,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestLoadIgnoresUnknownKeysAndRejectsGarbage(t *testing.T) {
-	t.Setenv("LOCALAPPDATA", t.TempDir())
+	t.Setenv(DataHomeEnv, t.TempDir())
 	if err := os.MkdirAll(DataDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -76,5 +76,35 @@ func TestLoadIgnoresUnknownKeysAndRejectsGarbage(t *testing.T) {
 	}
 	if c, err := Load(); err == nil || c != (Config{}) {
 		t.Fatalf("garbage: %+v %v", c, err)
+	}
+}
+
+func TestDataDirWithoutVariable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(DataHomeEnv, "")
+	t.Setenv("HOME", home)        // Linux
+	t.Setenv("USERPROFILE", home) // Windows
+	if got, want := DataDir(), filepath.Join(home, defaultDataHome, "AzothLauncher"); got != want {
+		t.Fatalf("DataDir = %q, want %q", got, want)
+	}
+}
+
+// The Linux setting round-trips (TestSaveLoadRoundTrip shows it stays out of
+// the file while empty).
+func TestLinuxSettingsRoundTrip(t *testing.T) {
+	t.Setenv(DataHomeEnv, t.TempDir())
+	want := Config{GameDir: "/games/New World", ProtonPath: "/opt/GE-Proton10-12"}
+	if err := Save(want); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Load(); err != nil || got != want {
+		t.Fatalf("round trip: %+v %v", got, err)
+	}
+	raw, err := os.ReadFile(Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"protonPath"`) {
+		t.Fatalf("protonPath missing from %s", raw)
 	}
 }
