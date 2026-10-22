@@ -105,13 +105,21 @@
           <button type="button" class="btn-ghost btn-sm" id="btn-browse">Browse…</button>
           <button type="button" class="btn-ghost btn-sm" id="btn-search">Search</button>
         </div>
-        <span class="field-help">The folder that holds <span class="mono">Bin64\NewWorld.exe</span>. Azoth never changes it: the game runs from its own copy.</span>
+        <span class="field-help">The folder that holds <span class="mono">Bin64\NewWorld.exe</span>. Azoth never changes its game files: the game runs from its own copy.</span>
       </label>
       <p class="search-status" id="search-status" hidden>
         <span class="spinner" id="search-spinner" hidden></span><span id="search-text"></span>
         <button type="button" class="btn-mini" id="btn-search-cancel" hidden>Cancel</button>
       </p>
       <ul class="candidates" id="candidates" hidden></ul>
+      <label class="field">
+        <span class="field-label">Game copy folder</span>
+        <div class="field-row">
+          <input type="text" id="in-copy" spellcheck="false" placeholder="Default">
+          <button type="button" class="btn-ghost btn-sm" id="btn-browse-copy">Browse…</button>
+        </div>
+        <span class="field-help">Where Azoth keeps its copy of <span class="mono">Bin64</span> (about 270 MB), in an <span class="mono">AzothClient</span> folder. Leave it empty for the default. Changing it deletes the old copy.</span>
+      </label>
       <div class="modal-actions">
         <span class="grow"></span>
         <button type="button" class="btn-ghost btn-sm" id="btn-settings-cancel">Cancel</button>

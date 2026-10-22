@@ -1,6 +1,7 @@
-// Package config keeps the launcher's only setting, the New World folder, in
-// %LOCALAPPDATA%\AzothLauncher\config.json (per-user, no registry, no admin).
-// The same directory holds the account session and the isolated game copy.
+// Package config keeps the launcher's settings, the New World folder and where
+// the isolated game copy lives, in %LOCALAPPDATA%\AzothLauncher\config.json
+// (per-user, no registry, no admin). The same directory holds the account
+// session and, unless the player picks another folder, the game copy.
 package config
 
 import (
@@ -20,6 +21,10 @@ type Config struct {
 	// (the one with Bin64\NewWorld.exe) or its Bin64 folder. It is read-only
 	// for Azoth; the game runs from an isolated copy.
 	GameDir string `json:"gameDir"`
+	// CopyDir is the folder of the isolated game copy (an AzothClient folder
+	// inside the one the player picked). Empty means the default,
+	// <DataDir>\client.
+	CopyDir string `json:"copyDir,omitempty"`
 }
 
 // DataDir is %LOCALAPPDATA%\AzothLauncher.

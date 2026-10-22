@@ -132,7 +132,7 @@ func ensureAssetsLink(link, target string, logf func(string, ...any)) error {
 		}
 		return nil
 	}
-	if st.Mode()&os.ModeSymlink == 0 && st.Mode()&os.ModeIrregular == 0 {
+	if !isLink(st) {
 		return fmt.Errorf("%s exists and is not a junction; remove it first", link)
 	}
 	if cur, err := os.Readlink(link); err == nil && sameDir(cur, target) {
@@ -147,6 +147,11 @@ func ensureAssetsLink(link, target string, logf func(string, ...any)) error {
 		return fmt.Errorf("assets junction: %w", err)
 	}
 	return nil
+}
+
+// isLink says whether st (from os.Lstat) is a junction or a symlink.
+func isLink(st os.FileInfo) bool {
+	return st.Mode()&os.ModeSymlink != 0 || st.Mode()&os.ModeIrregular != 0
 }
 
 func sameDir(a, b string) bool {
@@ -169,7 +174,7 @@ func CopyUpToDate(gameDir, dest string) bool {
 		return false
 	}
 	link := filepath.Join(dest, "assets")
-	if st, err := os.Lstat(link); err != nil || (st.Mode()&os.ModeSymlink == 0 && st.Mode()&os.ModeIrregular == 0) {
+	if st, err := os.Lstat(link); err != nil || !isLink(st) {
 		return false
 	}
 	if cur, err := os.Readlink(link); err != nil || !sameDir(cur, filepath.Join(gameDir, "assets")) {
@@ -177,6 +182,37 @@ func CopyUpToDate(gameDir, dest string) bool {
 	}
 	sum, _, err := NormalizedSHA256(exe)
 	return err == nil && sum == ExpectedSHA256
+}
+
+// RemoveCopy deletes the isolated copy in dir, the way Prepare built it: the
+// assets junction (the link only, never the install behind it), Bin64 and the
+// files at its root (the config files, autoexec.cfg and the game's
+// Default.log). Anything else in dir stays, and so does dir if it is not empty
+// then. A folder that is not a copy (no Bin64\NewWorld.exe, an install, or
+// assets as a real folder) is refused before anything is deleted.
+func RemoveCopy(dir string) error {
+	if !hasExe(dir) || IsSteamInstall(filepath.Join(dir, "Bin64")) {
+		return fmt.Errorf("%s is not an isolated copy", dir)
+	}
+	link := filepath.Join(dir, "assets")
+	if st, err := os.Lstat(link); err == nil {
+		if !isLink(st) {
+			return fmt.Errorf("%s is not a junction; the copy was left alone", link)
+		}
+		if err := os.Remove(link); err != nil { // the junction only
+			return err
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "Bin64")); err != nil {
+		return err
+	}
+	for _, f := range append(append([]string{}, rootFiles...), "autoexec.cfg", "Default.log") {
+		if err := os.Remove(filepath.Join(dir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	_ = os.Remove(dir) // fails, and keeps it, when something else is still inside
+	return nil
 }
 
 // copyFileIfDifferent copies src to dst unless dst already exists with the
