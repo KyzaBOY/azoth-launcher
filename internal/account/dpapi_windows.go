@@ -13,6 +13,28 @@ import (
 // CryptUnprotectData without knowing the string cannot decrypt it by accident.
 var entropy = []byte("azoth-launcher-account-v1")
 
+// saveBlob writes the session to account.dat encrypted with the user's DPAPI
+// (only this Windows user, on this machine, can read it back).
+func saveBlob(dir string, plain []byte) error {
+	enc, err := protect(plain)
+	if err != nil {
+		return err
+	}
+	return writeAccountFile(dir, enc)
+}
+
+// loadBlob reads and decrypts account.dat.
+func loadBlob(dir string) ([]byte, error) {
+	enc, err := readAccountFile(dir)
+	if err != nil {
+		return nil, err
+	}
+	return unprotect(enc)
+}
+
+// clearBlob deletes account.dat.
+func clearBlob(dir string) error { return removeAccountFile(dir) }
+
 // protect encrypts with the current user's DPAPI (no confirmation dialog).
 func protect(plain []byte) ([]byte, error) {
 	if len(plain) == 0 {
