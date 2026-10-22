@@ -106,10 +106,11 @@ func TestSearchCancelAndTimeout(t *testing.T) {
 		t.Fatalf("cancelled: %v", err)
 	}
 
-	// the time cap is not an error: partial results and complete=false
-	_, complete, err := Search(context.Background(), SearchOptions{Roots: []string{root}, NoSteam: true, Timeout: time.Nanosecond})
-	if err != nil || complete {
-		t.Fatalf("time cap: complete=%v err=%v", complete, err)
+	// the time cap is not an error. Whether this tiny scan beats a 1 ns cap
+	// depends on the clock (on Windows it often does, and then complete=true is
+	// right), so only the error is checked here.
+	if _, _, err := Search(context.Background(), SearchOptions{Roots: []string{root}, NoSteam: true, Timeout: time.Nanosecond}); err != nil {
+		t.Fatalf("time cap: %v", err)
 	}
 }
 

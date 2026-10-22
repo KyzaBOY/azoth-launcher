@@ -1,6 +1,14 @@
 # Azoth Launcher
 
-The launcher for **Azoth**, a fan-run server for *New World*. It starts your own copy of the original game client against the Azoth server, signs you in with Discord and gets out of the way.
+This is the launcher of **[Project Azoth](https://projectazoth.com)**, a fan-run server for *New World*, and the program players will use to connect to the Azoth playtest. It starts your own copy of the original game client against the Azoth server, signs you in with Discord and gets out of the way.
+
+## Why the source is open
+
+A launcher that starts your game, writes into its memory and signs you in is exactly the kind of program you should not have to take on trust. So the whole thing is here, every line of it. There is nothing to hide: no telemetry, no tracking, no hidden downloads, no secrets. Read it, build it, run the tests, and tell us if you find anything. Security reports are welcome as GitHub issues or as a DM to Kyza on the Azoth Discord (linked from [projectazoth.com](https://projectazoth.com)).
+
+The only thing that is not in the source is the address of the game server. It is passed in at build time (see [Build](#build)), so the code stays the same no matter which server a build points to.
+
+**Releases.** There is no release yet. The playtest build will be published on this repository's Releases page, built from this source, together with its sha256.
 
 > **Azoth is a fan project. It is not affiliated with, endorsed by or connected to Amazon or Amazon Games.** *New World* is a trademark of Amazon.com, Inc. or its affiliates. You need your own copy of the game, and nothing from the game is included in this repository.
 
@@ -25,7 +33,17 @@ All four are written into the running game process only. No file on disk is chan
 | 3 | **Ping host.** The place where the pinger reads its target host now reads a string the launcher wrote, which is the Azoth server's host. | So the menu ping measures the Azoth server instead of an Amazon host name. No `hosts` file edit is needed. |
 | 4 | **Persona.** The place where the client reads its login name now reads a string the launcher wrote, which is your Discord ticket. | The Azoth server learns who you are from the ticket instead of your Windows user name. |
 
-Patches 3 and 4 write their strings into unused space at the end of the game's `.rdata` section, and only after checking that the space is empty.
+Patches 3 and 4 write their strings into unused space at the end of the game's `.rdata` section, and only after checking that the space is empty. Patch 4 also turns two conditional jumps into no-ops, so the login code always reaches the spot that reads the ticket (otherwise it stops early with your Windows user name).
+
+Every patch site, with its original and new bytes, is in `internal/client/client.go` and `internal/client/redirect.go`.
+
+## Security notes
+
+Being open means being honest about the trade-offs too:
+
+- **Patch 1 turns off the game's check of the server certificate.** The game will talk to whatever answers at the server address the launcher gave it, without verifying who that is. The launcher always gives it the address baked into the build, but on a network you do not trust, someone in the middle could pretend to be the server. What they could get is your Play ticket, which is only good for Azoth and expires in 24 hours. Your Discord password and your Discord token never reach the launcher or the game.
+- **The Discord session** (30 days) is the valuable part, and it only ever travels to the account site over HTTPS. The launcher refuses plain `http` for anything other than `localhost`, does not follow redirects, and keeps the session encrypted with DPAPI.
+- **The loopback login listener** accepts exactly one callback and only during an open login. The page it shows is a fixed text; nothing from the URL is reflected into it.
 
 ## What it does not do
 
@@ -33,6 +51,7 @@ Patches 3 and 4 write their strings into unused space at the end of the game's `
 - It does **not** edit the `hosts` file, install a proxy, load a DLL or install a driver, and it never asks for administrator rights. Everything lives under your own user profile.
 - It does **not** connect you to Amazon's servers; it only starts the client pointed at the Azoth server.
 - It does **not** download the game, and it does **not** work with other builds of it.
+- It does **not** send anything anywhere except the two requests of the Discord login to the account site (code exchange and Play ticket) and the game's own traffic to the game server.
 - It contains **no secrets**. A build contains the address of the server it was made for and the public address of the account site, nothing else. Who is allowed to play is decided by the server's access list; the launcher has no way to grant anyone access.
 
 ## Discord login: what is stored and where
