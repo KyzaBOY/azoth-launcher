@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/KyzaBOY/azoth-launcher/internal/client"
+	"github.com/KyzaBOY/azoth-launcher/internal/config"
 )
 
 // The error texts below are written for the player: they are shown as they are
@@ -23,6 +24,28 @@ var (
 	errPatchFailed  = errors.New("Couldn't patch the game, so it was not started. Check that New World is build 1.400.6031 and try again.")
 	errBadAccountAt = errors.New("This build has an invalid account server address. Download the official launcher from projectazoth.com.")
 )
+
+// copyFolderName is the folder the game copy gets inside the folder the player
+// picks for it, so the copy never spreads its files over that folder.
+const copyFolderName = "AzothClient"
+
+// copyRoot is the folder of the isolated game copy for these settings.
+func copyRoot(c config.Config) string {
+	if c.CopyDir == "" {
+		return client.IsolatedCopyDir(config.DataDir())
+	}
+	return c.CopyDir
+}
+
+// copyDirFor turns the folder the player picked for the copy into the copy's
+// own folder: <picked>\AzothClient, or the pick itself when it already is one.
+func copyDirFor(picked string) string {
+	p := filepath.Clean(picked)
+	if strings.EqualFold(filepath.Base(p), copyFolderName) {
+		return p
+	}
+	return filepath.Join(p, copyFolderName)
+}
 
 // Progress texts for the status line.
 const (
@@ -61,12 +84,12 @@ func parseGateway(host, port string) (gateway, error) {
 //  3. the Azoth logo pak goes into the install's assets folder (the one file
 //     the launcher adds to an install; see client.InstallLogo);
 //  4. if the folder is an install of the game, the game never runs there: it
-//     runs from an isolated copy in dataDir, which is built the first time and
+//     runs from an isolated copy in copyDir, which is built the first time and
 //     reused while its exe and its assets link still match the install.
 //
 // Anything else (a folder that is already an isolated copy) runs in place:
 // the patches only ever live in the process memory. status gets progress texts.
-func prepareGame(gameDir, dataDir string, status func(string)) (string, error) {
+func prepareGame(gameDir, copyDir string, status func(string)) (string, error) {
 	if status == nil {
 		status = func(string) {}
 	}
@@ -96,7 +119,7 @@ func prepareGame(gameDir, dataDir string, status func(string)) (string, error) {
 	if !client.IsSteamInstall(binDir) {
 		return binDir, nil
 	}
-	dest := client.IsolatedCopyDir(dataDir)
+	dest := copyDir
 	if !client.CopyUpToDate(root, dest) {
 		status(statusPreparing)
 		if _, err := client.Prepare(client.PrepareOptions{GameDir: root, Dest: dest}); err != nil {

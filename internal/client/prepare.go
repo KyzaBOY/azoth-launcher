@@ -213,3 +213,47 @@ func isInside(path, dir string) bool {
 	sep := string(filepath.Separator)
 	return strings.HasPrefix(pathKey(path)+sep, pathKey(dir)+sep)
 }
+
+// PathInside says whether path is dir itself or lies below it, compared the
+// way the system compares paths (case-insensitive on Windows).
+func PathInside(path, dir string) bool { return isInside(path, dir) }
+
+// SamePath says whether a and b name the same folder, compared the way the
+// system compares paths.
+func SamePath(a, b string) bool { return pathKey(a) == pathKey(b) }
+
+// isLink says whether st (from os.Lstat) is a junction or a symlink.
+func isLink(st os.FileInfo) bool {
+	return st.Mode()&os.ModeSymlink != 0 || st.Mode()&os.ModeIrregular != 0
+}
+
+// RemoveCopy deletes the isolated copy in dir, the way Prepare built it: the
+// assets link (the link only, never the install behind it), Bin64 and the
+// files at its root (the config files, autoexec.cfg and the game's
+// Default.log). Anything else in dir stays, and so does dir if it is not empty
+// then. A folder that is not a copy (no Bin64/NewWorld.exe, an install, or
+// assets as a real folder) is refused before anything is deleted.
+func RemoveCopy(dir string) error {
+	if !hasExe(dir) || IsSteamInstall(filepath.Join(dir, "Bin64")) {
+		return fmt.Errorf("%s is not an isolated copy", dir)
+	}
+	link := filepath.Join(dir, "assets")
+	if st, err := os.Lstat(link); err == nil {
+		if !isLink(st) {
+			return fmt.Errorf("%s is not a %s; the copy was left alone", link, linkKind)
+		}
+		if err := os.Remove(link); err != nil { // the link only
+			return err
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "Bin64")); err != nil {
+		return err
+	}
+	for _, f := range append(append([]string{}, rootFiles...), "autoexec.cfg", "Default.log") {
+		if err := os.Remove(filepath.Join(dir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	_ = os.Remove(dir) // fails, and keeps it, when something else is still inside
+	return nil
+}

@@ -8,6 +8,7 @@ type LaunchOptions struct {
 	GatewayAddr string       // host:port of the gateway
 	PingHost    string       // patch #3: host the ICMP pinger measures ("" = leave the original one)
 	Persona     string       // patch #4: persona of the stubbed login (the Discord ticket); "" = Windows user name
+	RegionName  string       // patch #5: region name in the menu instead of "Local Host"; "" = leave it
 	Log         func(string) // gets every step as text (optional)
 }
 
@@ -31,6 +32,7 @@ type LaunchResult struct {
 
 	PingHost       string // patch #3: the host the ICMP pinger measures
 	PersonaPatched bool   // patch #4: persona = ticket (the value is never part of the report)
+	RegionName     string // patch #5: the region name the menu shows
 }
 
 // ErrPatchFailed wraps every error that made Launch kill the suspended process

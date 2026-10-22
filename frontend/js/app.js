@@ -1,6 +1,6 @@
 // Screen logic: the account panel (Discord), Play with its single status line,
-// and the settings dialog (the New World folder, with Browse and Search; on
-// Linux also the Proton folder).
+// and the settings dialog (the New World folder, with Browse and Search, the
+// folder of the game copy and, on Linux, the Proton folder).
 (function () {
   "use strict";
   const { api, bus, win, real, params } = window.AzothBridge;
@@ -102,6 +102,8 @@
   function openSettings() {
     $("in-game").value = (state.cfg && state.cfg.gameDir) || "";
     $("in-proton").value = (state.cfg && state.cfg.protonPath) || "";
+    $("in-copy").value = (state.cfg && state.cfg.copyDir) || "";
+    api.DefaultCopyDir().then((d) => { $("in-copy").placeholder = "Default: " + d; }).catch(() => {});
     state.found = []; state.selected = "";
     renderFound(); searchNote("");
     $("modal-settings").hidden = false;
@@ -116,7 +118,7 @@
     ev.preventDefault();
     try {
       const linux = state.linux ? { protonPath: $("in-proton").value.trim() } : {};
-      state.cfg = await api.SaveConfig({ ...state.cfg, gameDir: $("in-game").value.trim(), ...linux });
+      state.cfg = await api.SaveConfig({ ...state.cfg, gameDir: $("in-game").value.trim(), copyDir: $("in-copy").value.trim(), ...linux });
       closeSettings();
       setStatus("");
       toast("Settings saved.", true);
@@ -200,6 +202,7 @@
   $("form-settings").addEventListener("submit", saveSettings);
   $("btn-browse").addEventListener("click", browse);
   $("btn-browse-proton").addEventListener("click", () => browseInto("in-proton", "Proton folder"));
+  $("btn-browse-copy").addEventListener("click", () => browseInto("in-copy", "Folder for the game copy"));
   $("btn-search").addEventListener("click", search);
   $("btn-search-cancel").addEventListener("click", () => api.CancelSearch());
   $("btn-login").addEventListener("click", loginDiscord);

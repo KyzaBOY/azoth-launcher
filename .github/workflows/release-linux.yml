@@ -1,0 +1,49 @@
+# Builds the Linux launcher (scripts/release-linux.sh) on Ubuntu 22.04, so the
+# binary runs on most distributions, and attaches it to an existing release.
+# The server address comes from the repository secrets GATEWAY_HOST and
+# GATEWAY_PORT: it is never in the source, and GitHub masks it in the log.
+name: Linux release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the Linux build to (the release must exist)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install WebKitGTK
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          GATEWAY_HOST: ${{ secrets.GATEWAY_HOST }}
+          GATEWAY_PORT: ${{ secrets.GATEWAY_PORT }}
+        run: |
+          printf 'GATEWAY_HOST=%s\nGATEWAY_PORT=%s\n' "$GATEWAY_HOST" "$GATEWAY_PORT" > release.env
+          sh scripts/release-linux.sh
+          rm -f release.env
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" build/bin/AzothLauncher-linux-x86_64.tar.gz build/bin/AzothLauncher-linux-x86_64.tar.gz.sha256 --clobber

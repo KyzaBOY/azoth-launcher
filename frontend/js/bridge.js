@@ -40,7 +40,7 @@
   // ---- sample mode ------------------------------------------------------------
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const cfg = { gameDir: "", protonPath: "" };
+  const cfg = { gameDir: "", copyDir: "", protonPath: "" };
 
   let loginCancelled = false;
   let searchCancelled = false;
@@ -82,6 +82,7 @@
     async SaveConfig(c) { Object.assign(cfg, c); return { ...cfg }; },
     async PickGameDir() { return ""; },
     async PickFolder() { return ""; },
+    async DefaultCopyDir() { return "C:\\Users\\Player\\AppData\\Local\\AzothLauncher\\client"; },
     async SearchInstalls() {
       searchCancelled = false;
       for (let i = 0; i < 12 && !searchCancelled; i++) await sleep(150);

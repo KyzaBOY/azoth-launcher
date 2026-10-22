@@ -114,8 +114,11 @@ func (a *App) GetPlatform() string { return goruntime.GOOS }
 // GetConfig returns the current settings.
 func (a *App) GetConfig() config.Config { return a.snapshot() }
 
-// SaveConfig saves the settings. The folder is only checked for existing here;
-// whether it really is New World is checked when the player presses Play.
+// SaveConfig saves the settings. The New World folder is only checked for
+// existing here; whether it really is New World is checked when the player
+// presses Play. The copy folder becomes <picked>\AzothClient (see copyDirFor)
+// and has to be outside the game. When the copy moves, the old one is deleted
+// (client.RemoveCopy) and the next Play builds it in the new folder.
 func (a *App) SaveConfig(c config.Config) (config.Config, error) {
 	c.GameDir = cleanPath(c.GameDir)
 	c.ProtonPath = cleanPath(c.ProtonPath)
@@ -129,14 +132,44 @@ func (a *App) SaveConfig(c config.Config) (config.Config, error) {
 			return a.snapshot(), errors.New("That Proton folder has no proton script in it.")
 		}
 	}
+	c.CopyDir = cleanPath(c.CopyDir)
+	if c.CopyDir != "" {
+		if !filepath.IsAbs(c.CopyDir) {
+			return a.snapshot(), errors.New("Choose a full folder path for the game copy.")
+		}
+		c.CopyDir = copyDirFor(c.CopyDir)
+		if st, err := os.Stat(filepath.Dir(c.CopyDir)); err != nil || !st.IsDir() {
+			return a.snapshot(), errors.New("The game copy folder doesn't exist.")
+		}
+		if st, err := os.Stat(c.CopyDir); err == nil && !st.IsDir() {
+			return a.snapshot(), fmt.Errorf("%s is a file. Choose another folder for the game copy.", c.CopyDir)
+		}
+		if client.IsSteamInstall(filepath.Join(c.CopyDir, "Bin64")) {
+			return a.snapshot(), errors.New("The game copy can't go inside a game install. Choose another folder.")
+		}
+		if root, _, err := client.ResolveGame(c.GameDir); err == nil && (client.PathInside(c.CopyDir, root) || client.PathInside(root, c.CopyDir)) {
+			return a.snapshot(), errors.New("The game copy can't go inside your New World folder. Choose another folder.")
+		}
+	}
 	a.mu.Lock()
+	old := copyRoot(a.cfg)
 	a.cfg = c
 	a.mu.Unlock()
 	if err := config.Save(c); err != nil {
 		return c, fmt.Errorf("Couldn't save the settings: %w", err)
 	}
+	if !client.SamePath(old, copyRoot(c)) {
+		if _, err := os.Stat(old); err == nil {
+			if err := client.RemoveCopy(old); err != nil { // the old copy only costs disk space
+				runtime.LogWarning(a.ctx, "old game copy: "+err.Error())
+			}
+		}
+	}
 	return c, nil
 }
+
+// DefaultCopyDir is where the game copy lives when no folder is picked.
+func (a *App) DefaultCopyDir() string { return client.IsolatedCopyDir(config.DataDir()) }
 
 // cleanPath trims spaces and the quotes Explorer puts around "Copy as path".
 func cleanPath(p string) string {
@@ -178,7 +211,7 @@ func (a *App) SearchInstalls() (SearchResult, error) {
 		cancel()
 	}()
 
-	installs, complete, err := client.Search(ctx, client.SearchOptions{Skip: []string{config.DataDir()}})
+	installs, complete, err := client.Search(ctx, client.SearchOptions{Skip: []string{config.DataDir(), copyRoot(a.snapshot())}})
 	if err != nil { // only a cancelled context
 		return SearchResult{Installs: []client.Install{}, Cancelled: true}, nil
 	}
@@ -296,7 +329,7 @@ func (a *App) play() (notice string, err error) {
 		return "", errNotLoggedIn
 	}
 	cfg := a.snapshot()
-	binDir, err := prepareGame(cfg.GameDir, dataDir, a.setStatus)
+	binDir, err := prepareGame(cfg.GameDir, copyRoot(cfg), a.setStatus)
 	if err != nil {
 		return "", err
 	}
@@ -310,6 +343,7 @@ func (a *App) play() (notice string, err error) {
 		GatewayAddr: gw.addr,
 		PingHost:    gw.host,
 		Persona:     ticket,
+		RegionName:  regionName,
 	})
 	if err != nil { // the launch already killed the process if a patch failed
 		return "", startError(err)

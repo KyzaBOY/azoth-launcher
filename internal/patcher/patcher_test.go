@@ -14,7 +14,7 @@ import (
 func reader(s string) *bufio.Reader { return bufio.NewReader(strings.NewReader(s)) }
 
 func TestRequestRoundTrip(t *testing.T) {
-	want := Request{V: Version, BinDir: `Z:\home\p\.local\share\AzothLauncher\client\Bin64`, GatewayAddr: "play.example.test:6000", PingHost: "play.example.test", Persona: "ticket-abc"}
+	want := Request{V: Version, BinDir: `Z:\home\p\.local\share\AzothLauncher\client\Bin64`, GatewayAddr: "play.example.test:6000", PingHost: "play.example.test", Persona: "ticket-abc", RegionName: "NA"}
 	var buf bytes.Buffer
 	if err := WriteLine(&buf, want); err != nil {
 		t.Fatal(err)

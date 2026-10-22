@@ -121,8 +121,94 @@ func TestSaveConfigProtonPath(t *testing.T) {
 	}
 }
 
+func TestSaveConfigCopyDir(t *testing.T) {
+	a, _ := newTestApp(t)
+	if got := copyRoot(a.GetConfig()); got != a.DefaultCopyDir() || got != client.IsolatedCopyDir(config.DataDir()) {
+		t.Fatalf("default copy folder = %q", got)
+	}
+	base := t.TempDir()
+
+	// the copy goes in an AzothClient folder inside the picked one
+	got, err := a.SaveConfig(config.Config{CopyDir: `"` + base + `"`})
+	want := filepath.Join(base, copyFolderName)
+	if err != nil || got.CopyDir != want || copyRoot(a.GetConfig()) != want {
+		t.Fatalf("save: %+v %v", got, err)
+	}
+	// picking that AzothClient folder again keeps it as it is
+	if got, err := a.SaveConfig(config.Config{CopyDir: want}); err != nil || got.CopyDir != want {
+		t.Fatalf("save again: %+v %v", got, err)
+	}
+	if c, err := config.Load(); err != nil || c.CopyDir != want {
+		t.Fatalf("on disk: %+v %v", c, err)
+	}
+
+	// refused, and the previous value stays
+	mkGame := func(root string) string {
+		if err := os.MkdirAll(filepath.Join(root, "Bin64"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "Bin64", client.ExeName), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	game := mkGame(filepath.Join(t.TempDir(), "New World"))
+	nested := mkGame(filepath.Join(t.TempDir(), copyFolderName, "New World"))
+	steam := filepath.Join(t.TempDir(), "steamapps", "common")
+	if err := os.MkdirAll(steam, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(steam, copyFolderName), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]config.Config{
+		"relative":      {CopyDir: `Games`},
+		"missing":       {CopyDir: filepath.Join(base, "nope", "deeper")},
+		"steam library": {CopyDir: steam},
+		"in the game":   {GameDir: game, CopyDir: game},
+		"around a game": {GameDir: nested, CopyDir: filepath.Dir(filepath.Dir(nested))},
+		"is a file":     {CopyDir: filepath.Join(steam, copyFolderName)},
+	} {
+		if got, err := a.SaveConfig(c); err == nil || got.CopyDir != want || a.GetConfig().CopyDir != want {
+			t.Fatalf("%s: accepted (%+v %v)", name, got, err)
+		}
+	}
+
+	// moving the copy deletes the old one, never the game's assets behind it
+	gameAssets := filepath.Join(game, "assets")
+	if err := os.MkdirAll(gameAssets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gameAssets, "game.pak"), []byte("pak"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(want, "Bin64"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(want, "Bin64", client.ExeName), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dirLink(filepath.Join(want, "assets"), gameAssets); err != nil {
+		t.Fatal(err)
+	}
+	other := t.TempDir()
+	if got, err := a.SaveConfig(config.Config{CopyDir: other}); err != nil || got.CopyDir != filepath.Join(other, copyFolderName) {
+		t.Fatalf("move: %+v %v", got, err)
+	}
+	if _, err := os.Stat(want); !os.IsNotExist(err) {
+		t.Fatalf("the old copy is still there (%v)", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(gameAssets, "game.pak")); err != nil || string(got) != "pak" {
+		t.Fatalf("moving the copy touched the game's assets: %q %v", got, err)
+	}
+	// empty goes back to the default
+	if got, err := a.SaveConfig(config.Config{}); err != nil || got.CopyDir != "" || copyRoot(got) != a.DefaultCopyDir() {
+		t.Fatalf("clear: %+v %v", got, err)
+	}
+}
+
 func TestPrepareGameErrors(t *testing.T) {
-	data := t.TempDir()
+	data := filepath.Join(t.TempDir(), copyFolderName)
 	if _, err := prepareGame("", data, nil); err != errNoFolder {
 		t.Fatalf("empty: %v", err)
 	}
@@ -157,8 +243,8 @@ func TestPrepareGameErrors(t *testing.T) {
 	if want := "This New World version isn't supported. Azoth needs build 1.400.6031."; errUnsupported.Error() != want {
 		t.Fatalf("unsupported text: %q", errUnsupported)
 	}
-	// nothing was built in the data directory for a refused build
-	if _, err := os.Stat(client.IsolatedCopyDir(data)); err == nil {
+	// nothing was built in the copy folder for a refused build
+	if _, err := os.Stat(data); err == nil {
 		t.Fatal("the isolated copy must not be created for an unsupported build")
 	}
 }

@@ -29,7 +29,7 @@ const (
 	// Version is the protocol version. Both sides refuse any other.
 	Version = 1
 
-	// MaxRequestLine caps a request line: a path, a host and a ticket.
+	// MaxRequestLine caps a request line: a path, a host, a ticket and the region name.
 	MaxRequestLine = 4 << 10
 	// MaxReplyLine caps a reply line (a LaunchResult is far smaller).
 	MaxReplyLine = 16 << 10
@@ -47,6 +47,7 @@ type Request struct {
 	GatewayAddr string `json:"gatewayAddr"` // host:port
 	PingHost    string `json:"pingHost"`    // patch #3
 	Persona     string `json:"persona"`     // patch #4: the Discord ticket
+	RegionName  string `json:"regionName"`  // patch #5
 }
 
 // Reply is a message from the helper. It never carries the ticket.

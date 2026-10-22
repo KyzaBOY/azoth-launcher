@@ -16,7 +16,7 @@ The only thing that is not in the source is the address of the game server. It i
 
 1. **Finds your game.** You pick the New World folder (or press *Search*, which looks through your Steam libraries and your local drives).
 2. **Checks the version.** Only one build is supported, `1.400.6031.6004151`. The launcher computes the sha256 of `NewWorld.exe` and refuses anything else.
-3. **Plays from a copy.** Your install is never run, and no game file in it is ever changed (the one file the launcher adds is the logo pak below). On first Play the launcher builds an isolated copy in `%LOCALAPPDATA%\AzothLauncher\client` (the `Bin64` folder plus a few small config files, about 270 MB; the large `assets` folder is an NTFS junction back to your install, so it takes no extra space). The copy is reused until the game files change. On Linux the copy is in `~/.local/share/AzothLauncher/client` and `assets` is a symlink; see [Linux](#linux).
+3. **Plays from a copy.** Your install is never run, and no game file in it is ever changed (the one file the launcher adds is the logo pak below). On first Play the launcher builds an isolated copy in `%LOCALAPPDATA%\AzothLauncher\client` (the `Bin64` folder plus a few small config files, about 270 MB; the large `assets` folder is an NTFS junction back to your install, so it takes no extra space). The copy is reused until the game files change. You can put it somewhere else in Settings (*Game copy folder*): it then lives in an `AzothClient` folder inside the folder you pick, and the old copy is deleted (the `assets` junction is removed as a link, never the install behind it). On Linux the default copy is in `~/.local/share/AzothLauncher/client` and `assets` is a symlink; see [Linux](#linux).
 4. **Signs you in.** *Log in with Discord* opens your browser on projectazoth.com. Play stays disabled until you are logged in.
 5. **Adds the Azoth logo.** See [The Azoth logo](#the-azoth-logo).
 6. **Starts the game suspended, patches it in memory, resumes it.** The four patches are listed below. The game does not execute a single instruction before every patch has been written and read back; if anything looks unexpected (a different build, bytes that are not the ones we expect), the process is killed instead of resumed.
@@ -76,8 +76,8 @@ What is kept on your PC, in `%LOCALAPPDATA%\AzothLauncher`:
 | File | Content |
 |---|---|
 | `account.dat` | Your Discord id, your Discord name and the session token, encrypted with Windows **DPAPI** (only your Windows user, on this PC, can decrypt it). *Log out* deletes it. |
-| `config.json` | One setting: `{"gameDir": "<the New World folder you picked>"}`. |
-| `client\` | The isolated game copy described above. |
+| `config.json` | Your settings: `{"gameDir": "<the New World folder you picked>", "copyDir": "<the game copy folder, if you picked one>"}`. |
+| `client\` | The isolated game copy described above, unless you picked another folder for it. |
 
 On every Play the launcher trades the session for a **ticket** (valid for 24 hours). The ticket goes straight into the game process as the persona. It is never written to disk and never logged or shown. If the server answers that your Discord account is not on the access list, you see a message and your session is left alone.
 

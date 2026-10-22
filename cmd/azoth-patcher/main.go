@@ -66,6 +66,7 @@ func run(args []string, stderr io.Writer, launch func(client.LaunchOptions) (*cl
 		GatewayAddr: req.GatewayAddr,
 		PingHost:    req.PingHost,
 		Persona:     req.Persona,
+		RegionName:  req.RegionName,
 	})
 	done := patcher.Reply{V: patcher.Version, Stage: patcher.StageDone, OK: err == nil, Result: res}
 	if err != nil {

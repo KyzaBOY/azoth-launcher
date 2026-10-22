@@ -54,7 +54,7 @@ func replies(t *testing.T, path string) []patcher.Reply {
 }
 
 func goodRequest() string {
-	return fmt.Sprintf(`{"v":1,"binDir":"C:\\copy\\Bin64","gatewayAddr":"play.example.test:6000","pingHost":"play.example.test","persona":%q}`, testTicket) + "\n"
+	return fmt.Sprintf(`{"v":1,"binDir":"C:\\copy\\Bin64","gatewayAddr":"play.example.test:6000","pingHost":"play.example.test","persona":%q,"regionName":"NA"}`, testTicket) + "\n"
 }
 
 func TestRunLaunches(t *testing.T) {
@@ -67,8 +67,8 @@ func TestRunLaunches(t *testing.T) {
 	if code := run([]string{"-request", req, "-reply", rep}, io.Discard, launch); code != exitOK {
 		t.Fatalf("exit %d", code)
 	}
-	want := client.LaunchOptions{BinDir: `C:\copy\Bin64`, GatewayAddr: "play.example.test:6000", PingHost: "play.example.test", Persona: testTicket}
-	if got.BinDir != want.BinDir || got.GatewayAddr != want.GatewayAddr || got.PingHost != want.PingHost || got.Persona != want.Persona || got.Log != nil {
+	want := client.LaunchOptions{BinDir: `C:\copy\Bin64`, GatewayAddr: "play.example.test:6000", PingHost: "play.example.test", Persona: testTicket, RegionName: "NA"}
+	if got.BinDir != want.BinDir || got.GatewayAddr != want.GatewayAddr || got.PingHost != want.PingHost || got.Persona != want.Persona || got.RegionName != want.RegionName || got.Log != nil {
 		t.Fatalf("launch got %+v", got)
 	}
 	reps := replies(t, rep)

@@ -90,6 +90,7 @@ func Launch(ctx context.Context, o Options) (patcher.Reply, error) {
 		GatewayAddr: o.Launch.GatewayAddr,
 		PingHost:    o.Launch.PingHost,
 		Persona:     o.Launch.Persona,
+		RegionName:  o.Launch.RegionName,
 	}); err != nil {
 		return patcher.Reply{}, err
 	}
