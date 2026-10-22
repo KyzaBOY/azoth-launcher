@@ -6,7 +6,8 @@
 //   ?account=1            start logged in
 //   ?screen=settings      open the settings dialog (add &run=search to run the search)
 //   ?search=none|one|many what Search finds (default: many)
-//   ?play=error|denied    how Play ends (default: success)
+//   ?play=error|denied|pingblocked  how Play ends (default: success)
+//   ?platform=linux       show the Linux settings and paths
 (function () {
   "use strict";
 
@@ -39,7 +40,7 @@
   // ---- sample mode ------------------------------------------------------------
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const cfg = { gameDir: "" };
+  const cfg = { gameDir: "", protonPath: "" };
 
   let loginCancelled = false;
   let searchCancelled = false;
@@ -59,6 +60,7 @@
 
   const api = {
     async GetVersion() { return "0.1.0"; },
+    async GetPlatform() { return params.get("platform") || "windows"; },
     async GetAccount() { return { ...acct }; },
     async LoginDiscord() {
       bus.emitLocal("app:busy", true);
@@ -79,6 +81,7 @@
     async GetConfig() { return { ...cfg }; },
     async SaveConfig(c) { Object.assign(cfg, c); return { ...cfg }; },
     async PickGameDir() { return ""; },
+    async PickFolder() { return ""; },
     async SearchInstalls() {
       searchCancelled = false;
       for (let i = 0; i < 12 && !searchCancelled; i++) await sleep(150);
@@ -96,6 +99,7 @@
       switch (params.get("play")) {
         case "error": return { ok: false, error: "This New World version isn't supported. Azoth needs build 1.400.6031." };
         case "denied": return { ok: false, error: "Your Discord account doesn't have access yet. The playtest is closed for now." };
+        case "pingblocked": return { ok: true, notice: "Game started. The menu ping will show 9999 ms: this system blocks ping for normal users (net.ipv4.ping_group_range). See the README." };
         default: return { ok: true };
       }
     },

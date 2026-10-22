@@ -105,13 +105,23 @@
           <button type="button" class="btn-ghost btn-sm" id="btn-browse">Browse…</button>
           <button type="button" class="btn-ghost btn-sm" id="btn-search">Search</button>
         </div>
-        <span class="field-help">The folder that holds <span class="mono">Bin64\NewWorld.exe</span>. Azoth never changes it: the game runs from its own copy.</span>
+        <span class="field-help">The folder that holds <span class="mono" id="game-exe-path">Bin64\NewWorld.exe</span>. Azoth never changes it: the game runs from its own copy.</span>
       </label>
       <p class="search-status" id="search-status" hidden>
         <span class="spinner" id="search-spinner" hidden></span><span id="search-text"></span>
         <button type="button" class="btn-mini" id="btn-search-cancel" hidden>Cancel</button>
       </p>
       <ul class="candidates" id="candidates" hidden></ul>
+      <div id="linux-settings" hidden>
+        <label class="field">
+          <span class="field-label">Proton folder</span>
+          <div class="field-row">
+            <input type="text" id="in-proton" spellcheck="false" placeholder="UMU-Proton">
+            <button type="button" class="btn-ghost btn-sm" id="btn-browse-proton">Browse…</button>
+          </div>
+          <span class="field-help">Optional, for example a GE-Proton folder. Leave it empty and umu-run uses UMU-Proton.</span>
+        </label>
+      </div>
       <div class="modal-actions">
         <span class="grow"></span>
         <button type="button" class="btn-ghost btn-sm" id="btn-settings-cancel">Cancel</button>
