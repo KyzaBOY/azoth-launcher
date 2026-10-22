@@ -259,3 +259,66 @@ func TestCopyUpToDateWithoutACopy(t *testing.T) {
 		t.Fatal("a different exe cannot be up to date")
 	}
 }
+
+func TestRemoveCopy(t *testing.T) {
+	game := mkInstall(t, filepath.Join(t.TempDir(), "New World"))
+	gameAssets := filepath.Join(game, "assets")
+	if err := os.MkdirAll(gameAssets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gameAssets, "game.pak"), []byte("pak"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := mkInstall(t, filepath.Join(t.TempDir(), "AzothClient"))
+	for _, f := range append(append([]string{}, rootFiles...), "autoexec.cfg", "Default.log") {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(f), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := CreateJunction(filepath.Join(dir, "assets"), gameAssets); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RemoveCopy(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("the copy is still there (%v)", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(gameAssets, "game.pak")); err != nil || string(got) != "pak" {
+		t.Fatalf("removing the copy touched the install's assets: %q %v", got, err)
+	}
+
+	// something else in the folder stays, and so does the folder
+	dir2 := mkInstall(t, filepath.Join(t.TempDir(), "AzothClient"))
+	if err := os.WriteFile(filepath.Join(dir2, "notes.txt"), []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveCopy(dir2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir2, "notes.txt")); err != nil {
+		t.Fatalf("a file that is not part of the copy was deleted: %v", err)
+	}
+	if hasExe(dir2) {
+		t.Fatal("Bin64 was not removed")
+	}
+
+	// not a copy: refused, nothing deleted
+	if err := RemoveCopy(t.TempDir()); err == nil {
+		t.Fatal(`a folder without Bin64\NewWorld.exe was accepted`)
+	}
+	if err := os.WriteFile(filepath.Join(game, "installscript.vdf"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveCopy(game); err == nil || !hasExe(game) {
+		t.Fatalf("an install was accepted (%v)", err)
+	}
+	real := mkInstall(t, filepath.Join(t.TempDir(), "AzothClient"))
+	if err := os.MkdirAll(filepath.Join(real, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveCopy(real); err == nil || !hasExe(real) {
+		t.Fatalf("a copy with a real assets folder was touched (%v)", err)
+	}
+}

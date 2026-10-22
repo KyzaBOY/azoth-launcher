@@ -1,5 +1,6 @@
 // Screen logic: the account panel (Discord), Play with its single status line,
-// and the settings dialog (the New World folder, with Browse and Search).
+// and the settings dialog (the New World folder, with Browse and Search, and the
+// folder of the game copy).
 (function () {
   "use strict";
   const { api, bus, win, real, params } = window.AzothBridge;
@@ -100,6 +101,8 @@
   // ---------- settings ----------
   function openSettings() {
     $("in-game").value = (state.cfg && state.cfg.gameDir) || "";
+    $("in-copy").value = (state.cfg && state.cfg.copyDir) || "";
+    api.DefaultCopyDir().then((d) => { $("in-copy").placeholder = "Default: " + d; }).catch(() => {});
     state.found = []; state.selected = "";
     renderFound(); searchNote("");
     $("modal-settings").hidden = false;
@@ -113,7 +116,7 @@
   async function saveSettings(ev) {
     ev.preventDefault();
     try {
-      state.cfg = await api.SaveConfig({ ...state.cfg, gameDir: $("in-game").value.trim() });
+      state.cfg = await api.SaveConfig({ ...state.cfg, gameDir: $("in-game").value.trim(), copyDir: $("in-copy").value.trim() });
       closeSettings();
       setStatus("");
       toast("Settings saved.", true);
@@ -124,6 +127,13 @@
     try {
       const dir = await api.PickGameDir();
       if (dir) { $("in-game").value = dir; state.selected = ""; renderFound(); }
+    } catch (e) { toast(errText(e)); }
+  }
+
+  async function browseCopy() {
+    try {
+      const dir = await api.PickCopyDir();
+      if (dir) $("in-copy").value = dir;
     } catch (e) { toast(errText(e)); }
   }
 
@@ -180,6 +190,7 @@
   $("btn-settings-cancel").addEventListener("click", closeSettings);
   $("form-settings").addEventListener("submit", saveSettings);
   $("btn-browse").addEventListener("click", browse);
+  $("btn-browse-copy").addEventListener("click", browseCopy);
   $("btn-search").addEventListener("click", search);
   $("btn-search-cancel").addEventListener("click", () => api.CancelSearch());
   $("btn-login").addEventListener("click", loginDiscord);
