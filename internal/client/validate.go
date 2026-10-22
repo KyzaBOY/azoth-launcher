@@ -44,10 +44,11 @@ var PatchSites = []patchSite{
 }
 
 // IsSteamInstall says whether binDir is inside an install of the game. It
-// looks at the path (steamapps\common) and at the marks only an install has.
+// looks at the path (steamapps\common or steamapps/common) and at the marks
+// only an install has.
 func IsSteamInstall(binDir string) bool {
-	low := strings.ToLower(filepath.Clean(binDir))
-	if strings.Contains(low, `\steamapps\common\`) {
+	low := strings.ToLower(strings.ReplaceAll(filepath.Clean(binDir), `\`, "/"))
+	if strings.Contains(low, "/steamapps/common/") {
 		return true
 	}
 	root := filepath.Dir(binDir)

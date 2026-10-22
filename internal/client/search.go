@@ -2,20 +2,16 @@ package client
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
-
-	"golang.org/x/sys/windows"
 )
 
 const (
-	// DefaultSearchDepth is how far below a drive root the scan looks for
-	// <dir>\Bin64\NewWorld.exe.
+	// DefaultSearchDepth is how far below a scan root the scan looks for
+	// <dir>/Bin64/NewWorld.exe.
 	DefaultSearchDepth = 3
 	// DefaultSearchTimeout is the total time cap of a Search.
 	DefaultSearchTimeout = 20 * time.Second
@@ -28,9 +24,9 @@ type Install struct {
 }
 
 // SearchOptions tunes Search. The zero value searches the Steam libraries and
-// every fixed drive.
+// the platform's scan roots (searchRoots).
 type SearchOptions struct {
-	Roots   []string      // folders to scan instead of the fixed drives' roots (tests)
+	Roots   []string      // folders to scan instead of searchRoots() (tests)
 	NoSteam bool          // skip the Steam libraries (tests)
 	Skip    []string      // folders that are never entered (the launcher's own data directory)
 	Depth   int           // levels below each root; 0 = DefaultSearchDepth
@@ -46,10 +42,11 @@ var skipNames = map[string]bool{
 }
 
 // Search finds New World installs: every Steam library that has one, plus a
-// scan of every fixed drive for <dir>\Bin64\NewWorld.exe up to opts.Depth
-// levels below the drive root. The scan skips Windows, the recycle bin,
-// hidden/system folders and anything in opts.Skip, and does not follow
-// junctions or symlinks. Each hit gets its normalized sha256 checked.
+// scan of every scan root (fixed drives on Windows, disk mounts and the home
+// folder on Linux) for <dir>/Bin64/NewWorld.exe up to opts.Depth levels below
+// the root. The scan skips system folders (skipNames, alwaysSkip), hidden
+// folders and anything in opts.Skip, and does not follow junctions or
+// symlinks. Each hit gets its normalized sha256 checked.
 //
 // The scan stops at opts.Timeout: complete is then false and the hits found so
 // far are returned. If ctx is cancelled, Search returns ctx's error.
@@ -68,7 +65,7 @@ func Search(ctx context.Context, opts SearchOptions) (installs []Install, comple
 	var roots []string
 	seen := map[string]bool{}
 	add := func(root string) {
-		key := strings.ToLower(filepath.Clean(root))
+		key := pathKey(root)
 		if !seen[key] {
 			seen[key] = true
 			roots = append(roots, filepath.Clean(root))
@@ -81,14 +78,16 @@ func Search(ctx context.Context, opts SearchOptions) (installs []Install, comple
 		}
 	}
 	skip := map[string]bool{}
-	for _, s := range opts.Skip {
-		if s != "" {
-			skip[strings.ToLower(filepath.Clean(s))] = true
+	for _, list := range [][]string{alwaysSkip(), opts.Skip} {
+		for _, s := range list {
+			if s != "" {
+				skip[pathKey(s)] = true
+			}
 		}
 	}
 	scanRoots := opts.Roots
 	if scanRoots == nil {
-		scanRoots = FixedDrives()
+		scanRoots = searchRoots()
 	}
 	for _, r := range scanRoots {
 		scan(scanCtx, r, depth, skip, add)
@@ -119,33 +118,9 @@ func sortInstalls(in []Install) {
 	})
 }
 
-// FixedDrives lists the roots (like `C:\`) of the fixed local drives: no
-// removable media, network shares or optical drives.
-func FixedDrives() []string {
-	mask, err := windows.GetLogicalDrives()
-	if err != nil {
-		return nil
-	}
-	var drives []string
-	for i := 0; i < 26; i++ {
-		if mask&(1<<uint(i)) == 0 {
-			continue
-		}
-		root := string(rune('A'+i)) + `:\`
-		p, err := windows.UTF16PtrFromString(root)
-		if err != nil {
-			continue
-		}
-		if windows.GetDriveType(p) == windows.DRIVE_FIXED {
-			drives = append(drives, root)
-		}
-	}
-	return drives
-}
-
 // scan walks root breadth-first (shallow hits first) down to depth levels and
-// calls found for every directory that holds Bin64\NewWorld.exe. It also looks
-// for a Steam library layout (steamapps\common\New World), so a library that
+// calls found for every directory that holds Bin64/NewWorld.exe. It also looks
+// for a Steam library layout (steamapps/common/New World), so a library that
 // Steam no longer lists is still found. It returns when ctx is done.
 func scan(ctx context.Context, root string, depth int, skip map[string]bool, found func(string)) {
 	type item struct {
@@ -180,25 +155,10 @@ func scan(ctx context.Context, root string, depth int, skip map[string]bool, fou
 				continue
 			}
 			child := filepath.Join(it.dir, e.Name())
-			if skip[strings.ToLower(child)] {
+			if skip[pathKey(child)] {
 				continue
 			}
 			queue = append(queue, item{child, it.level + 1})
 		}
 	}
-}
-
-// walkable says whether the scan may enter a directory entry: it must be a
-// real directory, not hidden, not a system folder and not a reparse point
-// (junction or symlink).
-func walkable(e fs.DirEntry) bool {
-	info, err := e.Info()
-	if err != nil {
-		return false
-	}
-	if attrs, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
-		const skipAttrs = syscall.FILE_ATTRIBUTE_HIDDEN | syscall.FILE_ATTRIBUTE_SYSTEM | syscall.FILE_ATTRIBUTE_REPARSE_POINT
-		return attrs.FileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY != 0 && attrs.FileAttributes&skipAttrs == 0
-	}
-	return info.IsDir() && info.Mode()&(fs.ModeSymlink|fs.ModeIrregular) == 0
 }

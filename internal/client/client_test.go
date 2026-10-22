@@ -114,8 +114,13 @@ func TestGameArgs(t *testing.T) {
 }
 
 func TestIsSteamInstall(t *testing.T) {
-	if !IsSteamInstall(`D:\SteamLibrary\steamapps\common\New World\Bin64`) {
-		t.Fatal("a Steam path must be refused")
+	for _, p := range []string{
+		`D:\SteamLibrary\steamapps\common\New World\Bin64`,
+		"/home/player/.local/share/Steam/steamapps/common/New World/Bin64",
+	} {
+		if !IsSteamInstall(p) {
+			t.Fatalf("a Steam path must be refused: %s", p)
+		}
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "Bin64")
@@ -162,17 +167,15 @@ func TestResolveGame(t *testing.T) {
 	root := mkInstall(t, filepath.Join(t.TempDir(), "New World"))
 	bin := filepath.Join(root, "Bin64")
 
-	for _, in := range []string{
+	for _, in := range append([]string{
 		root,
-		root + `\`,
 		`"` + root + `"`,
 		"  " + root + "  ",
 		bin,
 		filepath.Join(bin, ExeName),
-		strings.ToLower(bin),
-	} {
+	}, platformResolveForms(root, bin)...) {
 		gotRoot, gotBin, err := ResolveGame(in)
-		if err != nil || !strings.EqualFold(gotRoot, root) || !strings.EqualFold(gotBin, bin) {
+		if err != nil || !sameDir(gotRoot, root) || !sameDir(gotBin, bin) {
 			t.Fatalf("ResolveGame(%q) = %q, %q, %v", in, gotRoot, gotBin, err)
 		}
 	}
@@ -213,7 +216,7 @@ func TestEnsureAssetsLink(t *testing.T) {
 	if err := ensureAssetsLink(link, a, logf); err != nil {
 		t.Fatal(err)
 	}
-	// another install: the junction is retargeted, never the folders behind it
+	// another install: the link is retargeted, never the folders behind it
 	if err := ensureAssetsLink(link, b, logf); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +229,7 @@ func TestEnsureAssetsLink(t *testing.T) {
 		}
 	}
 
-	// a real folder is not a junction: refuse instead of replacing it
+	// a real folder is not a link: refuse instead of replacing it
 	real := filepath.Join(dir, "copy2", "assets")
 	if err := os.MkdirAll(real, 0o755); err != nil {
 		t.Fatal(err)
@@ -235,12 +238,12 @@ func TestEnsureAssetsLink(t *testing.T) {
 		t.Fatal("a real folder must not be replaced")
 	}
 
-	// remove the junction itself (not its target) before the temp dir cleanup
+	// remove the link itself (not its target) before the temp dir cleanup
 	if err := os.Remove(link); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(b, "marker.txt")); err != nil {
-		t.Fatalf("removing the junction touched its target: %v", err)
+		t.Fatalf("removing the link touched its target: %v", err)
 	}
 }
 
@@ -257,5 +260,33 @@ func TestCopyUpToDateWithoutACopy(t *testing.T) {
 	}
 	if CopyUpToDate(game, dest) {
 		t.Fatal("a different exe cannot be up to date")
+	}
+}
+
+// TestPrepareRealInstall builds an isolated copy of the real install when
+// AZOTH_CLIENT_BIN points at its Bin64 folder (about 270 MB is copied to the
+// temp folder) and checks that the copy then counts as up to date.
+func TestPrepareRealInstall(t *testing.T) {
+	bin := os.Getenv("AZOTH_CLIENT_BIN")
+	if bin == "" {
+		t.Skip("AZOTH_CLIENT_BIN not set")
+	}
+	game := filepath.Dir(bin)
+	dest := filepath.Join(t.TempDir(), "client")
+	got, err := Prepare(PrepareOptions{GameDir: game, Dest: dest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameDir(got, filepath.Join(dest, "Bin64")) {
+		t.Fatalf("Prepare returned %s", got)
+	}
+	if !CopyUpToDate(game, dest) {
+		t.Fatal("a fresh copy must be up to date")
+	}
+	if IsSteamInstall(got) {
+		t.Fatal("the copy must not look like an install")
+	}
+	if err := os.Remove(filepath.Join(dest, "assets")); err != nil { // the link only, never the install's assets
+		t.Fatal(err)
 	}
 }
