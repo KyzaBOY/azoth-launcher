@@ -16,7 +16,7 @@ The only thing that is not in the source is the address of the game server. It i
 
 1. **Finds your game.** You pick the New World folder (or press *Search*, which looks through your Steam libraries and your local drives).
 2. **Checks the version.** Only one build is supported, `1.400.6031.6004151`. The launcher computes the sha256 of `NewWorld.exe` and refuses anything else.
-3. **Plays from a copy.** Your install is never run, and no game file in it is ever changed (the one file the launcher adds is the logo pak below). On first Play the launcher builds an isolated copy in `%LOCALAPPDATA%\AzothLauncher\client` (the `Bin64` folder plus a few small config files, about 270 MB; the large `assets` folder is an NTFS junction back to your install, so it takes no extra space). The copy is reused until the game files change.
+3. **Plays from a copy.** Your install is never run, and no game file in it is ever changed (the one file the launcher adds is the logo pak below). On first Play the launcher builds an isolated copy in `%LOCALAPPDATA%\AzothLauncher\client` (the `Bin64` folder plus a few small config files, about 270 MB; the large `assets` folder is an NTFS junction back to your install, so it takes no extra space). The copy is reused until the game files change. On Linux the copy is in `~/.local/share/AzothLauncher/client` and `assets` is a symlink; see [Linux](#linux).
 4. **Signs you in.** *Log in with Discord* opens your browser on projectazoth.com. Play stays disabled until you are logged in.
 5. **Adds the Azoth logo.** See [The Azoth logo](#the-azoth-logo).
 6. **Starts the game suspended, patches it in memory, resumes it.** The four patches are listed below. The game does not execute a single instruction before every patch has been written and read back; if anything looks unexpected (a different build, bytes that are not the ones we expect), the process is killed instead of resumed.
@@ -43,7 +43,7 @@ Every patch site, with its original and new bytes, is in `internal/client/client
 Being open means being honest about the trade-offs too:
 
 - **Patch 1 turns off the game's check of the server certificate.** The game will talk to whatever answers at the server address the launcher gave it, without verifying who that is. The launcher always gives it the address baked into the build, but on a network you do not trust, someone in the middle could pretend to be the server. What they could get is your Play ticket, which is only good for Azoth and expires in 24 hours. Your Discord password and your Discord token never reach the launcher or the game.
-- **The Discord session** (30 days) is the valuable part, and it only ever travels to the account site over HTTPS. The launcher refuses plain `http` for anything other than `localhost`, does not follow redirects, and keeps the session encrypted with DPAPI.
+- **The Discord session** (30 days) is the valuable part, and it only ever travels to the account site over HTTPS. The launcher refuses plain `http` for anything other than `localhost`, does not follow redirects, and keeps the session encrypted with DPAPI (on Linux: in the keyring, or unencrypted in a `0600` file when there is no keyring; see [Linux](#linux)).
 - **The loopback login listener** accepts exactly one callback and only during an open login. The page it shows is a fixed text; nothing from the URL is reflected into it.
 
 ## The Azoth logo
@@ -81,9 +81,30 @@ What is kept on your PC, in `%LOCALAPPDATA%\AzothLauncher`:
 
 On every Play the launcher trades the session for a **ticket** (valid for 24 hours). The ticket goes straight into the game process as the persona. It is never written to disk and never logged or shown. If the server answers that your Discord account is not on the access list, you see a message and your session is left alone.
 
+## Linux
+
+The Linux launcher is a native program: the window, the login, the settings, the search and the file work run on Linux, and no WebView2 is needed. Only the one step that has to be Windows runs inside Wine/Proton: a small helper, `azoth-patcher.exe`, starts `NewWorld.exe` suspended, writes and reads back the four patches and resumes it (or kills it). It is the same code as the Windows launcher's, and it ships next to the launcher. The launcher starts it with [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher) in its own Wine prefix.
+
+- **The ticket** goes to the helper through a named pipe (FIFO) with mode `0600`, in a folder with mode `0700`. It is never on a command line, in a file or in a log. The launcher checks the helper's sha256 against the one built into it before it starts it.
+- **Search** reads the Steam libraries of `~/.local/share/Steam`, `~/.steam/steam` and Flatpak Steam, then scans your home folder and your disk mounts. It never enters `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/snap`, `/boot`, `/efi`, `/usr`, hidden folders or symlinks.
+- **Settings** has one more field on Linux: a Proton folder (for example GE-Proton). Without it, umu-run downloads and uses UMU-Proton.
+- **The menu ping** (patches 2 and 3) uses ICMP. Under Wine that needs unprivileged ping sockets. Most distributions allow them; if yours does not, the game still starts and the status line says that the menu ping will show 9999 ms. To allow it (as root): `sysctl net.ipv4.ping_group_range="0 2147483647"`.
+
+What is kept on your PC, in `~/.local/share/AzothLauncher` (`$XDG_DATA_HOME/AzothLauncher`):
+
+| Path | Content |
+|---|---|
+| your keyring | The Discord session, in the Secret Service (GNOME Keyring, KWallet, KeePassXC), as the item *Azoth Launcher (Discord session)*. *Log out* deletes it. |
+| `account.dat` | Only if no Secret Service is running: the same session in a file that only your user can read (mode `0600`). **It is not encrypted.** |
+| `config.json` | The same settings as on Windows, plus `protonPath` when you set it. |
+| `client/` | The isolated game copy. |
+| `prefix/` | The Wine prefix (made on the first Play). |
+| `bin/azoth-patcher.exe` | The helper, copied there because Wine sees that folder. |
+
 ## Requirements
 
 - Windows 10 or 11, 64-bit, with the WebView2 runtime (already part of Windows 11 and of current Edge installs).
+- Or Linux, 64-bit, with WebKitGTK 4.1 (`libwebkit2gtk-4.1-0` on Debian/Ubuntu, `webkit2gtk4.1` on Fedora, `webkit2gtk-4.1` on Arch) and [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher) (`umu-run` in `PATH`).
 - Your own copy of *New World* at build `1.400.6031.6004151` (sha256 of the unpatched `NewWorld.exe`: `8654f01d324636d9f74f1c793b0cc4a417c3c5fa9847d9913c358ca29e0fdc8e`).
 - A Discord account that the server's access list accepts.
 
@@ -111,22 +132,34 @@ powershell -ExecutionPolicy Bypass -File scripts\release.ps1
 
 It runs `wails build -clean` with your values baked in and writes `build\bin\AzothLauncher.exe.sha256` (`<sha256>  AzothLauncher.exe`) next to the executable.
 
-**Tests.** `go test ./...` runs everything. If you set `AZOTH_CLIENT_BIN` to a `Bin64` folder of the supported build, one extra test also checks the patch sites against the real `NewWorld.exe`.
+**Linux build.** You need Go 1.26 or newer, a C compiler, `pkg-config` and the `webkit2gtk-4.1` and `gtk+-3.0` development packages; the Wails CLI is not needed. With `release.env` filled in as above, run:
 
-**The screen without Wails.** `frontend\index.html` also opens in a plain browser with sample data (`frontend\js\bridge.js`), which is handy for working on the look: `?account=1` starts logged in, `?screen=settings` opens the settings dialog, `?search=none|one|many` picks what Search finds.
+```
+scripts/release-linux.sh
+```
+
+It builds `azoth-patcher.exe`, builds the launcher with the helper's sha256 in it and writes `build/bin/AzothLauncher-linux-x86_64.tar.gz` (and `build/bin/AzothLauncher-x86_64.AppImage` when `appimagetool` is in `PATH`), each with a `.sha256` file. `scripts/release-linux.sh --no-server` makes a build without a server, like the Windows dev build. Build releases on an old distribution (Ubuntu 22.04) so they run on most others.
+
+**Tests.** `go test ./...` runs everything. If you set `AZOTH_CLIENT_BIN` to a `Bin64` folder of the supported build, two extra tests also check the patch sites against the real `NewWorld.exe` and build an isolated copy of it in the temp folder. On Linux, `AZOTH_KEYRING_TEST=1` also stores, reads and deletes one test item in your keyring. The Windows tests run under Wine too: `GOOS=windows go test -c ./internal/client` and run the `.exe` with `wine`.
+
+**The screen without Wails.** `frontend\index.html` also opens in a plain browser with sample data (`frontend\js\bridge.js`), which is handy for working on the look: `?account=1` starts logged in, `?screen=settings` opens the settings dialog, `?search=none|one|many` picks what Search finds, `?platform=linux` shows the Linux settings.
 
 ## Layout
 
 | Path | What is there |
 |---|---|
-| `main.go`, `app.go`, `flow.go` | Wails app, the methods the screen can call, and the Play pipeline. |
+| `main.go`, `app.go`, `flow.go` | Wails app, the methods the screen can call, and the Play pipeline. `*_windows.go` / `*_linux.go` hold the per-system parts. |
 | `internal/client` | The game side: version check, isolated copy, search for installs, launching and the in-memory patches. |
-| `internal/account` | Discord login (loopback + PKCE), ticket request, DPAPI session store. |
+| `internal/account` | Discord login (loopback + PKCE), ticket request, session store (DPAPI on Windows, Secret Service on Linux). |
 | `internal/config` | `config.json`. |
+| `internal/patcher` | The protocol between the Linux launcher and `azoth-patcher.exe`. |
+| `internal/wine` | Linux only: runs the helper through umu-run, installs and checks it, the ping check. |
+| `cmd/azoth-patcher` | The Windows helper of the Linux launcher. |
 | `frontend/` | The screen: plain HTML, CSS and JavaScript, with its fonts. |
 | `internal/client/logo/` | The Azoth logo: the artwork (`titlelogo.png`, `outrologo.png`) and the textures built from it (`.dds`). |
-| `scripts/release.ps1` | Release build. |
+| `scripts/release.ps1`, `scripts/release-linux.sh` | Release builds. |
 | `scripts/make-logo.py` | Rebuilds the logo `.dds` files from their PNGs (Python + Pillow). |
+| `docs/linux.md` | Design note of the Linux launcher. |
 
 ## License
 
