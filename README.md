@@ -18,7 +18,7 @@ The only thing that is not in the source is the address of the game server. It i
 2. **Checks the version.** Only one build is supported, `1.400.6031.6004151`. The launcher computes the sha256 of `NewWorld.exe` and refuses anything else.
 3. **Plays from a copy.** Your install is never run, and no game file in it is ever changed (the one file the launcher adds is the logo pak below). On first Play the launcher builds an isolated copy in `%LOCALAPPDATA%\AzothLauncher\client` (the `Bin64` folder plus a few small config files, about 270 MB; the large `assets` folder is an NTFS junction back to your install, so it takes no extra space). The copy is reused until the game files change.
 4. **Signs you in.** *Log in with Discord* opens your browser on projectazoth.com. Play stays disabled until you are logged in.
-5. **Adds the Azoth logo.** See [The tutorial logo](#the-tutorial-logo).
+5. **Adds the Azoth logo.** See [The Azoth logo](#the-azoth-logo).
 6. **Starts the game suspended, patches it in memory, resumes it.** The four patches are listed below. The game does not execute a single instruction before every patch has been written and read back; if anything looks unexpected (a different build, bytes that are not the ones we expect), the process is killed instead of resumed.
 
 The launcher has no log window, no server list and no news feed. The only feedback is one status line under the Play button.
@@ -46,13 +46,13 @@ Being open means being honest about the trade-offs too:
 - **The Discord session** (30 days) is the valuable part, and it only ever travels to the account site over HTTPS. The launcher refuses plain `http` for anything other than `localhost`, does not follow redirects, and keeps the session encrypted with DPAPI.
 - **The loopback login listener** accepts exactly one callback and only during an open login. The page it shows is a fixed text; nothing from the URL is reflected into it.
 
-## The tutorial logo
+## The Azoth logo
 
-At the end of the tutorial the game shows its title logo. The launcher swaps it for the Azoth logo, and this is the only thing it ever puts on disk inside your install:
+The game shows its title logo on the title screen ("press any button") and at the end of the tutorial. The launcher swaps both for the Azoth logo, and this is the only thing it ever puts on disk inside your install:
 
-- The game loads every `.pak` in its `assets` folder, so the launcher writes a small pak of its own there (about 180 KB) under two names, `00_azoth_logo.pak` and `zz_azoth_logo.pak`. Two names, one sorted before the game's paks and one after, so it wins however the engine picks between two paks that hold the same file.
-- The pak holds exactly one file, `lyshineui/images/hud/tutorialmessage/outrologo.dds`, our artwork in the same format as the original texture. No game file is changed, renamed or deleted; deleting the two paks puts everything back as it was.
-- The artwork is `internal/client/logo/outrologo.png`. `scripts/make-logo.py` turns it into `outrologo.dds`, which is embedded in the launcher; the pak is built from it on the fly, byte for byte the same every time.
+- The game loads every `.pak` in its `assets` folder, so the launcher writes a small pak of its own there (about 1 MB) under two names, `00_azoth_logo.pak` and `zz_azoth_logo.pak`. Two names, one sorted before the game's paks and one after, so it wins however the engine picks between two paks that hold the same file.
+- The pak holds exactly two files, `lyshineui/images/frontend/newworldlogo.dds` (title screen) and `lyshineui/images/hud/tutorialmessage/outrologo.dds` (tutorial), our artwork at the same size as the original textures. No game file is changed, renamed or deleted; deleting the two paks puts everything back as it was.
+- The artwork is `internal/client/logo/titlelogo.png` and `outrologo.png`. `scripts/make-logo.py` turns them into the `.dds` files embedded in the launcher; the pak is built from it on the fly, byte for byte the same every time.
 
 ## What it does not do
 
@@ -124,9 +124,9 @@ It runs `wails build -clean` with your values baked in and writes `build\bin\Azo
 | `internal/account` | Discord login (loopback + PKCE), ticket request, DPAPI session store. |
 | `internal/config` | `config.json`. |
 | `frontend/` | The screen: plain HTML, CSS and JavaScript, with its fonts. |
-| `internal/client/logo/` | The tutorial logo: the artwork (`outrologo.png`) and the texture built from it (`outrologo.dds`). |
+| `internal/client/logo/` | The Azoth logo: the artwork (`titlelogo.png`, `outrologo.png`) and the textures built from it (`.dds`). |
 | `scripts/release.ps1` | Release build. |
-| `scripts/make-logo.py` | Rebuilds `outrologo.dds` from `outrologo.png` (Python + Pillow). |
+| `scripts/make-logo.py` | Rebuilds the logo `.dds` files from their PNGs (Python + Pillow). |
 
 ## License
 

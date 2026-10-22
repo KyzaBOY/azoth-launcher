@@ -1,10 +1,13 @@
-"""Builds internal/client/logo/outrologo.dds from internal/client/logo/outrologo.png.
+"""Builds the logo textures in internal/client/logo from their PNGs.
 
-The game draws this image at the end of the tutorial, in place of its own title
-logo. The PNG must be 800x220 RGBA (white artwork on a transparent background).
-The DDS is written in the same format as the game's original texture: BC3 (DXT5)
-in a DX10 header with DXGI_FORMAT_BC3_UNORM_SRGB, one mip level, plus the small
-engine header extension ("CRYF") the game's textures carry.
+    outrologo.png  800x220   end of the tutorial (white artwork, transparent)
+    titlelogo.png  1216x652  title screen, "press any button" (artwork + soft glow)
+
+Each PNG must be RGBA at exactly that size. The DDS is written like the game's
+own UI textures: a DX10 header with DXGI_FORMAT_BC3_UNORM_SRGB (BC3 = DXT5), one
+mip level, plus the small engine header extension ("CRYF") they carry. (The
+game's title logo is BC7; BC3 has the same size and the header says which one
+it is.)
 
     python scripts/make-logo.py
 
@@ -18,13 +21,17 @@ import sys
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "internal", "client", "logo", "outrologo.png")
-DST = os.path.join(ROOT, "internal", "client", "logo", "outrologo.dds")
-WIDTH, HEIGHT = 800, 220
+LOGO_DIR = os.path.join(ROOT, "internal", "client", "logo")
+LOGOS = [("outrologo", 800, 220), ("titlelogo", 1216, 652)]
 DXGI_FORMAT_BC3_UNORM_SRGB = 78
 
 
 def main():
+    for name, width, height in LOGOS:
+        build(os.path.join(LOGO_DIR, name + ".png"), os.path.join(LOGO_DIR, name + ".dds"), width, height)
+
+
+def build(SRC, DST, WIDTH, HEIGHT):
     im = Image.open(SRC).convert("RGBA")
     if im.size != (WIDTH, HEIGHT):
         sys.exit(f"{SRC} is {im.size[0]}x{im.size[1]}, expected {WIDTH}x{HEIGHT}")

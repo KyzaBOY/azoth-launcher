@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
-// The Azoth title logo. At the end of the tutorial the game shows its own title
-// logo, the texture LogoEntry inside DataStrm-part3.pak. The launcher puts the
-// same path, with our artwork, in a small pak of its own.
+// The Azoth logos. The game shows its own title logo on the title screen
+// ("press any button") and at the end of the tutorial, two textures inside
+// DataStrm-part3.pak (LogoEntries). The launcher puts the same paths, with our
+// artwork, in a small pak of its own.
 //
 // The game mounts every <install>\assets\*.pak (the "@assets@/*.pak" mount in
 // the exe; PaksList.lst is only used to check that the listed paks open), so
@@ -21,33 +23,48 @@ import (
 // in under two names, one sorted before every game pak and one after them, so
 // it wins whichever way the engine resolves a file that is in two paks.
 //
-// internal/client/logo/outrologo.dds is built from outrologo.png by
-// scripts/make-logo.py (same format as the game's texture: BC3, DX10 header).
+// The .dds files in internal/client/logo are built from the .png next to them
+// by scripts/make-logo.py (BC3 in a DX10 header, like the game's UI textures).
 
-// LogoEntry is the path of the logo texture inside the game's paks.
-const LogoEntry = "lyshineui/images/hud/tutorialmessage/outrologo.dds"
+// LogoEntries maps each texture path inside the game's paks to our version.
+var LogoEntries = map[string][]byte{
+	"lyshineui/images/frontend/newworldlogo.dds":         titleLogoDDS, // title screen
+	"lyshineui/images/hud/tutorialmessage/outrologo.dds": outroLogoDDS, // end of the tutorial
+}
 
 // LogoPakNames are the file names of the logo pak in <install>\assets.
 var LogoPakNames = []string{"00_azoth_logo.pak", "zz_azoth_logo.pak"}
 
-//go:embed logo/outrologo.dds
-var logoDDS []byte
+var (
+	//go:embed logo/titlelogo.dds
+	titleLogoDDS []byte
+	//go:embed logo/outrologo.dds
+	outroLogoDDS []byte
+)
 
-// LogoPak returns the logo pak: a zip with LogoEntry stored uncompressed and a
-// fixed timestamp, so the bytes are the same on every run.
+// LogoPak returns the logo pak: a zip with every LogoEntries file stored
+// uncompressed, in name order and with a fixed timestamp, so the bytes are the
+// same on every run.
 func LogoPak() ([]byte, error) {
+	names := make([]string, 0, len(LogoEntries))
+	for name := range LogoEntries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	w, err := zw.CreateHeader(&zip.FileHeader{
-		Name:     LogoEntry,
-		Method:   zip.Store,
-		Modified: time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if _, err := w.Write(logoDDS); err != nil {
-		return nil, err
+	for _, name := range names {
+		w, err := zw.CreateHeader(&zip.FileHeader{
+			Name:     name,
+			Method:   zip.Store,
+			Modified: time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(LogoEntries[name]); err != nil {
+			return nil, err
+		}
 	}
 	if err := zw.Close(); err != nil {
 		return nil, err

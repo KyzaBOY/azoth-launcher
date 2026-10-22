@@ -11,16 +11,22 @@ import (
 )
 
 func TestLogoDDSFormat(t *testing.T) {
-	d := logoDDS
-	if len(d) != 148+800*220 || string(d[:4]) != "DDS " {
-		t.Fatalf("logo dds: %d bytes, magic %q", len(d), d[:4])
-	}
-	h, w := binary.LittleEndian.Uint32(d[12:]), binary.LittleEndian.Uint32(d[16:])
-	if w != 800 || h != 220 || string(d[84:88]) != "DX10" {
-		t.Fatalf("logo dds: %dx%d, fourcc %q (want 800x220 DX10)", w, h, d[84:88])
-	}
-	if f := binary.LittleEndian.Uint32(d[128:]); f != 78 { // DXGI_FORMAT_BC3_UNORM_SRGB, as the game's texture
-		t.Fatalf("logo dds: DXGI format %d, want 78", f)
+	for _, c := range []struct {
+		name string
+		d    []byte
+		w, h uint32
+	}{{"title", titleLogoDDS, 1216, 652}, {"outro", outroLogoDDS, 800, 220}} { // the sizes of the game's textures
+		d := c.d
+		if len(d) != 148+int(c.w*c.h) || string(d[:4]) != "DDS " { // BC3: 1 byte per pixel
+			t.Fatalf("%s dds: %d bytes, magic %q", c.name, len(d), d[:4])
+		}
+		h, w := binary.LittleEndian.Uint32(d[12:]), binary.LittleEndian.Uint32(d[16:])
+		if w != c.w || h != c.h || string(d[84:88]) != "DX10" {
+			t.Fatalf("%s dds: %dx%d, fourcc %q (want %dx%d DX10)", c.name, w, h, d[84:88], c.w, c.h)
+		}
+		if f := binary.LittleEndian.Uint32(d[128:]); f != 78 { // DXGI_FORMAT_BC3_UNORM_SRGB
+			t.Fatalf("%s dds: DXGI format %d, want 78", c.name, f)
+		}
 	}
 }
 
@@ -37,17 +43,23 @@ func TestLogoPak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(zr.File) != 1 || zr.File[0].Name != LogoEntry || zr.File[0].Method != zip.Store {
-		t.Fatalf("pak entries: %+v", zr.File)
+	if len(zr.File) != len(LogoEntries) {
+		t.Fatalf("pak has %d entries, want %d", len(zr.File), len(LogoEntries))
 	}
-	rc, err := zr.File[0].Open()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rc.Close()
-	got, err := io.ReadAll(rc) // also checks the CRC
-	if err != nil || !bytes.Equal(got, logoDDS) {
-		t.Fatalf("pak content differs from the embedded dds (err %v)", err)
+	for _, f := range zr.File {
+		want, ok := LogoEntries[f.Name]
+		if !ok || len(want) == 0 || f.Method != zip.Store {
+			t.Fatalf("unexpected pak entry %q (method %d)", f.Name, f.Method)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(rc) // also checks the CRC
+		rc.Close()
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("%s differs from the embedded dds (err %v)", f.Name, err)
+		}
 	}
 }
 
