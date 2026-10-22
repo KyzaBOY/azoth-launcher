@@ -336,6 +336,7 @@ func (a *App) play() error {
 		GatewayAddr: gw.addr,
 		PingHost:    gw.host,
 		Persona:     ticket,
+		RegionName:  regionName,
 	})
 	if err != nil { // Launch already killed the process if a patch failed
 		return startError(err)
