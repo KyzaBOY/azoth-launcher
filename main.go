@@ -31,6 +31,9 @@ var (
 	gatewayHost string
 	gatewayPort string
 	accountURL  = "https://projectazoth.com"
+	// regionName replaces "Local Host" in the game menu (up to 10 bytes;
+	// "" keeps the original). Override with -X main.regionName=...
+	regionName = "NA"
 )
 
 func main() {
