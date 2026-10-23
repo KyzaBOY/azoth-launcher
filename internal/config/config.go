@@ -31,6 +31,10 @@ type Config struct {
 	// inside the one the player picked). Empty means the default,
 	// <DataDir>/client.
 	CopyDir string `json:"copyDir,omitempty"`
+	// Username is the name typed in builds made with the username login
+	// (loginMode "user", for test servers): it becomes the persona, and each
+	// name is its own account. Unused in the Discord builds.
+	Username string `json:"username,omitempty"`
 }
 
 // DataDir is <DataHomeEnv>/AzothLauncher, or <home>/<defaultDataHome>/AzothLauncher

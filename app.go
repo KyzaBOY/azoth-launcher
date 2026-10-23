@@ -111,6 +111,10 @@ func (a *App) GetVersion() string { return Version }
 // settings only on Linux.
 func (a *App) GetPlatform() string { return goruntime.GOOS }
 
+// GetLoginMode returns "discord" or "user" (the loginMode build setting): the
+// screen shows the Discord account panel or the username field accordingly.
+func (a *App) GetLoginMode() string { return effectiveLoginMode() }
+
 // GetConfig returns the current settings.
 func (a *App) GetConfig() config.Config { return a.snapshot() }
 
@@ -118,8 +122,15 @@ func (a *App) GetConfig() config.Config { return a.snapshot() }
 // existing here; whether it really is New World is checked when the player
 // presses Play. The copy folder becomes <picked>\AzothClient (see copyDirFor)
 // and has to be outside the game. When the copy moves, the old one is deleted
-// (client.RemoveCopy) and the next Play builds it in the new folder.
+// (client.RemoveCopy) and the next Play builds it in the new folder. In the
+// username login the name is checked here too (validateUsername); empty clears it.
 func (a *App) SaveConfig(c config.Config) (config.Config, error) {
+	c.Username = strings.TrimSpace(c.Username)
+	if c.Username != "" && effectiveLoginMode() == loginModeUser {
+		if _, err := validateUsername(c.Username); err != nil {
+			return a.snapshot(), err
+		}
+	}
 	c.GameDir = cleanPath(c.GameDir)
 	c.ProtonPath = cleanPath(c.ProtonPath)
 	if c.GameDir != "" {
@@ -304,7 +315,7 @@ func (a *App) Logout() AccountInfo {
 }
 
 // Launch starts the game with the in-memory patches. It refuses without a
-// Discord login. Progress goes out as evStatus events; the result carries the
+// Discord login (or, in the username login, without a valid username). Progress goes out as evStatus events; the result carries the
 // error text, if any. Neither the session nor the ticket is ever logged or shown.
 func (a *App) Launch() PlayResult {
 	if !a.setBusy(true) {
@@ -324,25 +335,37 @@ func (a *App) play() (notice string, err error) {
 		return "", err
 	}
 	dataDir := config.DataDir()
-	sess, ok := account.Load(dataDir)
-	if !ok {
-		return "", errNotLoggedIn
-	}
 	cfg := a.snapshot()
+	// The persona is the Play ticket of the Discord login or, in the username
+	// login (test servers), the typed name: no account, no ticket.
+	userLogin := effectiveLoginMode() == loginModeUser
+	var sess account.Session
+	var persona string
+	if userLogin {
+		if persona, err = validateUsername(cfg.Username); err != nil {
+			return "", err
+		}
+	} else {
+		var ok bool
+		if sess, ok = account.Load(dataDir); !ok {
+			return "", errNotLoggedIn
+		}
+	}
 	binDir, err := prepareGame(cfg.GameDir, copyRoot(cfg), a.setStatus)
 	if err != nil {
 		return "", err
 	}
-	ticket, err := a.ticket(dataDir, sess)
-	if err != nil {
-		return "", err
+	if !userLogin {
+		if persona, err = a.ticket(dataDir, sess); err != nil {
+			return "", err
+		}
 	}
 	a.setStatus(statusStarting)
 	notice, err = a.launchGame(cfg, client.LaunchOptions{
 		BinDir:      binDir,
 		GatewayAddr: gw.addr,
 		PingHost:    gw.host,
-		Persona:     ticket,
+		Persona:     persona,
 		RegionName:  regionName,
 	})
 	if err != nil { // the launch already killed the process if a patch failed

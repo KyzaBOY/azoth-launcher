@@ -124,6 +124,8 @@ wails build -ldflags "-X main.gatewayHost=your.server.host -X main.gatewayPort=6
 
 The account site defaults to `https://projectazoth.com`. For a local account server you can override it with `-X main.accountURL=http://localhost:8090` (plain `http` is only accepted for `localhost` and `127.0.0.1`).
 
+**Username login (test servers).** `-X main.loginMode=user` makes a build that has no Discord login: the launcher asks for a username (3 to 24 letters, numbers, `_` or `-`) and sends it to the game as the persona, so each name is its own account. It only works against a gateway that accepts a plain persona (the server's `-auth open`); an official server only accepts Play tickets. Any other `loginMode` value, or none, is the Discord login.
+
 **Release build for your own server.** Copy `release.env.example` to `release.env` (it is gitignored), set `GATEWAY_HOST` and `GATEWAY_PORT`, then run:
 
 ```
@@ -142,7 +144,7 @@ It builds `azoth-patcher.exe`, builds the launcher with the helper's sha256 in i
 
 **Tests.** `go test ./...` runs everything. If you set `AZOTH_CLIENT_BIN` to a `Bin64` folder of the supported build, two extra tests also check the patch sites against the real `NewWorld.exe` and build an isolated copy of it in the temp folder. On Linux, `AZOTH_KEYRING_TEST=1` also stores, reads and deletes one test item in your keyring. The Windows tests run under Wine too: `GOOS=windows go test -c ./internal/client` and run the `.exe` with `wine`.
 
-**The screen without Wails.** `frontend\index.html` also opens in a plain browser with sample data (`frontend\js\bridge.js`), which is handy for working on the look: `?account=1` starts logged in, `?screen=settings` opens the settings dialog, `?search=none|one|many` picks what Search finds, `?platform=linux` shows the Linux settings.
+**The screen without Wails.** `frontend\index.html` also opens in a plain browser with sample data (`frontend\js\bridge.js`), which is handy for working on the look: `?account=1` starts logged in, `?screen=settings` opens the settings dialog, `?search=none|one|many` picks what Search finds, `?platform=linux` shows the Linux settings, `?login=user` shows the username login.
 
 ## Layout
 

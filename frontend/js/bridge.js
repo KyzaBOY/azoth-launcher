@@ -8,6 +8,7 @@
 //   ?search=none|one|many what Search finds (default: many)
 //   ?play=error|denied|pingblocked  how Play ends (default: success)
 //   ?platform=linux       show the Linux settings and paths
+//   ?login=user           the username login of the test-server builds (default: Discord)
 (function () {
   "use strict";
 
@@ -40,7 +41,7 @@
   // ---- sample mode ------------------------------------------------------------
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const cfg = { gameDir: "", copyDir: "", protonPath: "" };
+  const cfg = { gameDir: "", copyDir: "", protonPath: "", username: "" };
 
   let loginCancelled = false;
   let searchCancelled = false;
@@ -61,6 +62,7 @@
   const api = {
     async GetVersion() { return "0.1.0"; },
     async GetPlatform() { return params.get("platform") || "windows"; },
+    async GetLoginMode() { return params.get("login") === "user" ? "user" : "discord"; },
     async GetAccount() { return { ...acct }; },
     async LoginDiscord() {
       bus.emitLocal("app:busy", true);
@@ -79,7 +81,7 @@
       return { ...acct };
     },
     async GetConfig() { return { ...cfg }; },
-    async SaveConfig(c) { Object.assign(cfg, c); return { ...cfg }; },
+    async SaveConfig(c) { Object.assign(cfg, c, { username: String(c.username || "").trim() }); return { ...cfg }; },
     async PickGameDir() { return ""; },
     async PickFolder() { return ""; },
     async DefaultCopyDir() { return "C:\\Users\\Player\\AppData\\Local\\AzothLauncher\\client"; },

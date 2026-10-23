@@ -71,6 +71,14 @@
             <button type="button" class="btn-ghost btn-sm" id="btn-logout">Log out</button>
           </div>
         </div>
+        <!-- Username login (test servers, loginMode "user"): replaces the two Discord blocks above -->
+        <div class="account-body account-user" id="account-user" hidden>
+          <label class="field">
+            <span class="field-label">Username</span>
+            <input type="text" id="in-username" maxlength="24" spellcheck="false" autocomplete="off" placeholder="Pick a name">
+          </label>
+          <p class="account-note">Test server: each username is its own account.</p>
+        </div>
         <p class="account-err" id="account-err" hidden></p>
       </section>
 

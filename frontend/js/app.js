@@ -1,12 +1,13 @@
-// Screen logic: the account panel (Discord), Play with its single status line,
-// and the settings dialog (the New World folder, with Browse and Search, the
-// folder of the game copy and, on Linux, the Proton folder).
+// Screen logic: the account panel (Discord, or a username field in builds for
+// test servers), Play with its single status line, and the settings dialog
+// (the New World folder, with Browse and Search, the folder of the game copy
+// and, on Linux, the Proton folder).
 (function () {
   "use strict";
   const { api, bus, win, real, params } = window.AzothBridge;
   const $ = (id) => document.getElementById(id);
 
-  const state = { cfg: null, account: null, busy: false, loggingIn: false, searching: false, found: [], selected: "", linux: false };
+  const state = { cfg: null, account: null, busy: false, loggingIn: false, searching: false, found: [], selected: "", linux: false, userMode: false };
 
   // ---------- helpers ----------
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -27,13 +28,18 @@
   }
 
   // ---------- Play ----------
+  // Discord login: logged in. Username login: something typed (the backend checks the name).
+  function canPlay() {
+    return state.userMode ? !!$("in-username").value.trim() : !!(state.account && state.account.loggedIn);
+  }
+
   function updatePlay() {
-    const logged = !!(state.account && state.account.loggedIn);
+    const ready = canPlay();
     const btn = $("btn-play");
-    btn.disabled = !logged || state.busy;
+    btn.disabled = !ready || state.busy;
     btn.classList.toggle("is-busy", state.busy && !state.loggingIn);
     btn.querySelector(".btn-play-text").textContent = state.busy && !state.loggingIn ? "Launching" : "Play";
-    btn.title = logged ? "" : "Log in with Discord to play";
+    btn.title = ready ? "" : state.userMode ? "Type a username to play" : "Log in with Discord to play";
   }
 
   function setBusy(b) {
@@ -44,7 +50,10 @@
 
   async function launch() {
     if (state.busy) return;
-    if (!state.account || !state.account.loggedIn) return;
+    if (!canPlay()) return;
+    if (state.userMode) {
+      try { await saveUsername(); } catch (e) { setStatus(errText(e), true); return; }
+    }
     if (!state.cfg || !state.cfg.gameDir) {
       setStatus("Choose your New World folder in Settings first.", true);
       openSettings();
@@ -61,6 +70,24 @@
     } finally {
       setBusy(false);
     }
+  }
+
+  // ---------- account (username login) ----------
+  // The field is saved with the other settings every time Play is pressed; the
+  // backend checks the name and returns it trimmed.
+  async function saveUsername() {
+    state.cfg = await api.SaveConfig({ ...state.cfg, username: $("in-username").value });
+    $("in-username").value = state.cfg.username || "";
+  }
+
+  // The username build has no Discord account: its panel replaces the Discord one.
+  function applyLoginMode(mode) {
+    state.userMode = mode === "user";
+    if (!state.userMode) return;
+    $("account-out").hidden = true; $("account-in").hidden = true;
+    $("account-user").hidden = false;
+    $("in-username").value = (state.cfg && state.cfg.username) || "";
+    updatePlay();
   }
 
   // ---------- account (Discord login) ----------
@@ -209,6 +236,8 @@
   $("btn-login-cancel").addEventListener("click", () => api.CancelLogin());
   $("btn-logout").addEventListener("click", logout);
   $("btn-play").addEventListener("click", launch);
+  $("in-username").addEventListener("input", updatePlay);
+  $("in-username").addEventListener("keydown", (e) => { if (e.key === "Enter") launch(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("modal-settings").hidden) closeSettings(); });
   if (real) document.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -217,7 +246,8 @@
     $("foot-version").textContent = "v" + (await api.GetVersion());
     applyPlatform(await api.GetPlatform());
     state.cfg = await api.GetConfig();
-    renderAccount(await api.GetAccount());
+    applyLoginMode(await api.GetLoginMode());
+    if (!state.userMode) renderAccount(await api.GetAccount());
 
     // visual review shortcuts (outside Wails only): ?screen=settings&run=search
     if (!real && params && params.get("screen") === "settings") {

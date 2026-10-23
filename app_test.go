@@ -367,3 +367,150 @@ func TestStartError(t *testing.T) {
 		t.Fatalf("other failure: %v", got)
 	}
 }
+
+// setLoginMode sets the loginMode build setting for one test.
+func setLoginMode(t *testing.T, mode string) {
+	t.Helper()
+	old := loginMode
+	loginMode = mode
+	t.Cleanup(func() { loginMode = old })
+}
+
+func TestEffectiveLoginMode(t *testing.T) {
+	a, _ := newTestApp(t)
+	for _, c := range []struct{ set, want string }{
+		{"discord", "discord"},
+		{"", "discord"},
+		{"user", "user"},
+		{" User ", "user"},
+		{"users", "discord"}, // a typo never opens the username login
+		{"open", "discord"},
+	} {
+		setLoginMode(t, c.set)
+		if got := effectiveLoginMode(); got != c.want || a.GetLoginMode() != c.want {
+			t.Fatalf("loginMode %q: effective %q, GetLoginMode %q, want %q", c.set, got, a.GetLoginMode(), c.want)
+		}
+	}
+}
+
+func TestValidateUsername(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want string // the trimmed name when it is valid
+		err  error
+	}{
+		{"alice", "alice", nil},
+		{"  alice  ", "alice", nil}, // spaces at the ends are dropped
+		{"\tAlice_01-x\n", "Alice_01-x", nil},
+		{"abc", "abc", nil}, // the shortest
+		{"A-b_C", "A-b_C", nil},
+		{strings.Repeat("a", usernameMax), strings.Repeat("a", usernameMax), nil}, // the longest
+		{"az1x", "az1x", nil},     // close to the ticket prefix, but not it
+		{"xaz1-y", "xaz1-y", nil}, // the prefix only counts at the start
+
+		{"", "", errNoUsername},
+		{"    ", "", errNoUsername},
+		{"ab", "", errUsernameLen},
+		{strings.Repeat("a", usernameMax+1), "", errUsernameLen},
+		{"alice bob", "", errUsernameChars}, // inner space
+		{"al:ce", "", errUsernameChars},
+		{"dc:12345", "", errUsernameChars}, // the gateway refuses dc:, and ':' is not allowed anyway
+		{"alice!", "", errUsernameChars},
+		{"jão", "", errUsernameChars}, // non-ASCII
+		{"ééé", "", errUsernameChars},
+		{"al\x00ce", "", errUsernameChars},
+		{"az1-abc", "", errUsernameReserved},
+		{"AZ1-abc", "", errUsernameReserved},
+		{"Az1-", "", errUsernameReserved},
+		{"  az1-abc ", "", errUsernameReserved},
+	} {
+		got, err := validateUsername(c.in)
+		if err != c.err || got != c.want {
+			t.Errorf("validateUsername(%q) = %q, %v; want %q, %v", c.in, got, err, c.want, c.err)
+		}
+	}
+	// the longest name fits the persona slot with room to spare
+	if usernameMax >= client.MaxRedirectLen {
+		t.Fatalf("usernameMax %d does not fit the persona slot (%d)", usernameMax, client.MaxRedirectLen)
+	}
+	// every message is a short sentence for the player
+	for _, e := range []error{errNoUsername, errUsernameChars, errUsernameLen, errUsernameReserved} {
+		if !strings.HasSuffix(e.Error(), ".") {
+			t.Errorf("message %q must be a sentence", e)
+		}
+	}
+}
+
+func TestSaveConfigUsername(t *testing.T) {
+	a, _ := newTestApp(t)
+
+	// username login: the name is trimmed, checked and saved
+	setLoginMode(t, "user")
+	got, err := a.SaveConfig(config.Config{Username: "  alice_1 "})
+	if err != nil || got.Username != "alice_1" || a.GetConfig().Username != "alice_1" {
+		t.Fatalf("save: %+v %v", got, err)
+	}
+	if c, err := config.Load(); err != nil || c.Username != "alice_1" {
+		t.Fatalf("on disk: %+v %v", c, err)
+	}
+	// a bad name is refused and the previous one stays
+	for in, want := range map[string]error{"ab": errUsernameLen, "al ice": errUsernameChars, "az1-x": errUsernameReserved} {
+		got, err := a.SaveConfig(config.Config{Username: in})
+		if err != want || got.Username != "alice_1" || a.GetConfig().Username != "alice_1" {
+			t.Fatalf("%q: %+v %v", in, got, err)
+		}
+	}
+	// empty clears it
+	if got, err := a.SaveConfig(config.Config{Username: "   "}); err != nil || got.Username != "" || a.GetConfig().Username != "" {
+		t.Fatalf("clear: %+v %v", got, err)
+	}
+
+	// Discord login: the field is not on the screen, so the value is only carried along
+	setLoginMode(t, "discord")
+	if got, err := a.SaveConfig(config.Config{Username: " az1-x "}); err != nil || got.Username != "az1-x" {
+		t.Fatalf("discord mode: %+v %v", got, err)
+	}
+}
+
+// In the username login, Play needs no Discord account: the name is the persona.
+func TestLaunchUsernameLogin(t *testing.T) {
+	a, _ := newTestApp(t)
+	setLoginMode(t, "user")
+	// the account server must not be needed: an invalid address would fail the ticket step
+	setBuildSettings(t, "play.example.test", "6000", "http://projectazoth.com")
+
+	// no server compiled in: same as the Discord login
+	setBuildSettings(t, "", "", "http://projectazoth.com")
+	if r := a.Launch(); r.OK || r.Error != errNoServer.Error() {
+		t.Fatalf("no server: %+v", r)
+	}
+	setBuildSettings(t, "play.example.test", "6000", "http://projectazoth.com")
+
+	// no name, then a bad name: refused before anything else
+	if r := a.Launch(); r.OK || r.Error != errNoUsername.Error() {
+		t.Fatalf("no username: %+v", r)
+	}
+	a.cfg.Username = "ab"
+	if r := a.Launch(); r.OK || r.Error != errUsernameLen.Error() {
+		t.Fatalf("short username: %+v", r)
+	}
+	a.cfg.Username = "az1-ticket"
+	if r := a.Launch(); r.OK || r.Error != errUsernameReserved.Error() {
+		t.Fatalf("ticket-like username: %+v", r)
+	}
+
+	// a valid name with no Discord login gets past the name and stops at the missing folder
+	a.cfg.Username = "alice"
+	if r := a.Launch(); r.OK || r.Error != errNoFolder.Error() {
+		t.Fatalf("valid username, no folder: %+v", r)
+	}
+	if a.busy {
+		t.Fatal("still busy after Launch returned")
+	}
+
+	// the Discord login of a build without the username login is unchanged
+	setLoginMode(t, "discord")
+	if r := a.Launch(); r.OK || r.Error != errNotLoggedIn.Error() {
+		t.Fatalf("discord login: %+v", r)
+	}
+}

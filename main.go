@@ -33,6 +33,15 @@ var (
 	// regionName replaces "Local Host" in the game menu (up to 10 bytes;
 	// "" keeps the original). Override with -X main.regionName=...
 	regionName = "NA"
+	// loginMode is how the player signs in. "discord" (the default) is the
+	// official flow: Discord login, and the Play ticket from the account
+	// server becomes the persona. "user" is for test servers whose gateway
+	// accepts a plain persona (-auth open): there is no Discord login, the
+	// player types a username in the launcher and it becomes the persona, so
+	// every username is its own account. Override with -X main.loginMode=user.
+	// Any other value counts as "discord" (see effectiveLoginMode), so a typo
+	// never opens the username flow by accident.
+	loginMode = "discord"
 )
 
 func main() {

@@ -23,7 +23,60 @@ var (
 	errUnsupported  = errors.New("This New World version isn't supported. Azoth needs build 1.400.6031.")
 	errPatchFailed  = errors.New("Couldn't patch the game, so it was not started. Check that New World is build 1.400.6031 and try again.")
 	errBadAccountAt = errors.New("This build has an invalid account server address. Download the official launcher from projectazoth.com.")
+
+	errNoUsername       = errors.New("Type a username to play.")
+	errUsernameChars    = errors.New("Usernames can only use letters, numbers, _ and -.")
+	errUsernameLen      = fmt.Errorf("Usernames must have %d to %d characters.", usernameMin, usernameMax)
+	errUsernameReserved = errors.New("That username isn't allowed. Pick another one.")
 )
+
+// How the player signs in (the loginMode build setting, see main.go).
+const (
+	loginModeDiscord = "discord"
+	loginModeUser    = "user"
+)
+
+// effectiveLoginMode is loginMode as the rest of the launcher reads it: "user"
+// only for exactly that value, "discord" for everything else.
+func effectiveLoginMode() string {
+	if strings.EqualFold(strings.TrimSpace(loginMode), loginModeUser) {
+		return loginModeUser
+	}
+	return loginModeDiscord
+}
+
+// The username becomes the game's persona (client.PersonaRedirect), which is
+// copied into a slot of client.MaxRedirectLen bytes: 24 fit with a wide margin.
+const (
+	usernameMin = 3
+	usernameMax = 24
+	// ticketPrefix starts every Play ticket; a persona that starts with it is
+	// read as a ticket by the gateway, so a username can't.
+	ticketPrefix = "az1-"
+)
+
+// validateUsername trims s and checks it as a username: 3..24 characters of
+// [A-Za-z0-9_-], not starting with ticketPrefix (any case). It returns the
+// trimmed name, which is what goes into the game.
+func validateUsername(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", errNoUsername
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return "", errUsernameChars
+		}
+	}
+	if len(s) < usernameMin || len(s) > usernameMax {
+		return "", errUsernameLen
+	}
+	if len(s) >= len(ticketPrefix) && strings.EqualFold(s[:len(ticketPrefix)], ticketPrefix) {
+		return "", errUsernameReserved
+	}
+	return s, nil
+}
 
 // copyFolderName is the folder the game copy gets inside the folder the player
 // picks for it, so the copy never spreads its files over that folder.
