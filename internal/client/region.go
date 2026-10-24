@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 // Patch #5: the region name in the menu. With -GatewayMode stubbed the client
@@ -12,32 +13,38 @@ import (
 //	{ "channelName": "localhost", "localhost": { "displayName": "Local Host",
 //	  "localizedName": "@mm_localhost", "publicApis": [ ... ] } }
 //
-// The menu shows "Local Host". We overwrite the two quoted values in place with
-// our name, padded with spaces AFTER the closing quote (JSON whitespace), so the
-// literal keeps its length and stays valid JSON. A localizedName without '@' is
-// shown as is by the localization.
+// The menu shows "Local Host". The literal is padded with runs of spaces (JSON
+// whitespace), so we rewrite one span in place: from the opening quote of the
+// displayName value up to "publicApis", both values with our name, and the
+// rest of the span as spaces. The literal keeps its length and stays valid
+// JSON, and the name can be up to MaxRegionNameLen bytes. A localizedName
+// without '@' is shown as is by the localization.
 
-// RegionField is one quoted JSON value inside the literal.
+// RegionField is one span inside the literal.
 type RegionField struct {
-	Name string // "displayName", "localizedName" (goes to the log)
-	RVA  uint64 // the opening quote of the value
-	Orig string // the original value, quotes included
+	Name string // goes to the log
+	RVA  uint64 // the first byte of the span
+	Orig string // the original bytes of the span
 }
 
 // RegionFields were read from exe 1.400 (file offset + 0x1800 = RVA in .rdata;
 // each string appears once in the file).
-var RegionFields = []RegionField{
-	{Name: "displayName", RVA: 0x8501970, Orig: `"Local Host"`},
-	{Name: "localizedName", RVA: 0x85019ae, Orig: `"@mm_localhost"`},
-}
+var RegionFields = []RegionField{{
+	Name: "displayName+localizedName",
+	RVA:  0x8501970,
+	Orig: `"Local Host",` + strings.Repeat(" ", 32) + `"localizedName": "@mm_localhost",` + strings.Repeat(" ", 27),
+}}
 
-// MaxRegionNameLen fits the shorter field (`"Local Host"` = 10 + 2 quotes).
-const MaxRegionNameLen = 10
+// regionTemplate is what the span becomes, before the padding.
+const regionTemplate = `"%s", "localizedName": "%s",`
 
-// regionValue is the bytes that replace orig: `"name"` + spaces up to len(orig).
+// MaxRegionNameLen fits the span (105 bytes) with both values.
+const MaxRegionNameLen = 40
+
+// regionValue is the bytes that replace orig: both values with name, then spaces up to len(orig).
 func regionValue(orig, name string) ([]byte, error) {
-	if name == "" || len(name)+2 > len(orig) {
-		return nil, fmt.Errorf("region name must have 1..%d bytes (got %d)", len(orig)-2, len(name))
+	if name == "" || len(name) > MaxRegionNameLen || len(fmt.Sprintf(regionTemplate, name, name)) > len(orig) {
+		return nil, fmt.Errorf("region name must have 1..%d bytes (got %d)", MaxRegionNameLen, len(name))
 	}
 	for i := 0; i < len(name); i++ {
 		if c := name[i]; c < 0x20 || c >= 0x7f || c == '"' || c == '\\' {
@@ -45,8 +52,6 @@ func regionValue(orig, name string) ([]byte, error) {
 		}
 	}
 	out := bytes.Repeat([]byte{' '}, len(orig))
-	out[0] = '"'
-	copy(out[1:], name)
-	out[len(name)+1] = '"'
+	copy(out, fmt.Sprintf(regionTemplate, name, name))
 	return out, nil
 }

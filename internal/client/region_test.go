@@ -8,13 +8,21 @@ import (
 	"testing"
 )
 
-// The literal as it sits in exe 1.400 (whitespace collapsed).
-const stubChannelJSON = `{ "channelName": "localhost", "localhost": { "displayName": "Local Host", "localizedName": "@mm_localhost", "publicApis": [ { "awsRegion": "us-east-1", "version": "1.0", "apiEndpoint": "127.0.0.1", "clientTag": "authStack" } ] } }`
+// The literal as it sits in exe 1.400 (the span with its real padding, the rest collapsed).
+var stubChannelJSON = `{ "channelName": "localhost", "localhost": { "displayName": ` + RegionFields[0].Orig +
+	`"publicApis": [ { "awsRegion": "us-east-1", "version": "1.0", "apiEndpoint": "127.0.0.1", "clientTag": "authStack" } ] } }`
 
 func TestRegionValueKeepsJSON(t *testing.T) {
+	for _, name := range []string{"NA", "Azoth Bug Hunting", strings.Repeat("x", MaxRegionNameLen)} {
+		checkRegionJSON(t, name)
+	}
+}
+
+func checkRegionJSON(t *testing.T, name string) {
+	t.Helper()
 	s := stubChannelJSON
 	for _, f := range RegionFields {
-		v, err := regionValue(f.Orig, "NA")
+		v, err := regionValue(f.Orig, name)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,18 +46,19 @@ func TestRegionValueKeepsJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(s), &doc); err != nil {
 		t.Fatalf("patched literal is not JSON: %v\n%s", err, s)
 	}
-	if doc.Localhost.DisplayName != "NA" || doc.Localhost.LocalizedName != "NA" {
+	if doc.Localhost.DisplayName != name || doc.Localhost.LocalizedName != name {
 		t.Fatalf("got %+v", doc.Localhost)
 	}
 }
 
 func TestRegionValueRejects(t *testing.T) {
-	for _, bad := range []string{"", "North America", `a"b`, `a\b`, "x\x00"} {
-		if _, err := regionValue(`"Local Host"`, bad); err == nil {
+	orig := RegionFields[0].Orig
+	for _, bad := range []string{"", strings.Repeat("x", MaxRegionNameLen+1), `a"b`, `a\b`, "x\x00", "jão"} {
+		if _, err := regionValue(orig, bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	if _, err := regionValue(`"Local Host"`, strings.Repeat("x", MaxRegionNameLen)); err != nil {
+	if _, err := regionValue(orig, strings.Repeat("x", MaxRegionNameLen)); err != nil {
 		t.Errorf("max length refused: %v", err)
 	}
 }
