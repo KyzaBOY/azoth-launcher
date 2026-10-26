@@ -154,6 +154,14 @@ func Launch(opts LaunchOptions) (*LaunchResult, error) {
 		logf("[persona] not logged in: the client uses the Windows user name as persona")
 	}
 
+	// ---- patch #5: region name in the menu (.rdata) ------------------------
+	if opts.RegionName != "" {
+		if err := applyRegionName(pi.Process, base, opts.RegionName, logf); err != nil {
+			return kill(err)
+		}
+		res.RegionName = opts.RegionName
+	}
+
 	if _, err := windows.ResumeThread(pi.Thread); err != nil {
 		return kill(fmt.Errorf("ResumeThread: %w", err))
 	}
